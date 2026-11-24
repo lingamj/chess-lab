@@ -1,0 +1,52 @@
+# Changelog
+**Project:** Chess AI · **Date:** 2026-08-09
+
+## Phase-0 Fixes Applied (2026-08-09)
+- B-020 – board.py repetition count restored in undo_move
+- B-021 – web_control.py inverted checkmate result fixed
+- B-022 – Model path unified to chess_nn.pkl
+- B-023 – Engine lock added for shared analysis searches
+- B-024 – SSE queue bounded
+- B-025 – batch.js human polling uses current_fen
+- B-026 – Aspiration timeout fallback retains the last valid score
+- B-027 – stop_event properly initialized and cleared before UCI search
+- B-028 – themed data unpacking fixed
+- B-029 – MCTS selection sign corrected
+- B-030 – nn.train() accepts integer or one-hot policy targets
+- B-031 – fen_queue bounded
+- B-032 – go infinite handled
+- B-033 – Stockfish analysis error handling corrected
+- B-034 – background game-thread exception handlers added
+
+Earlier fixes B-001 through B-019 were applied before this Phase-0 verification cycle.
+See `BUG_TRACKER.md` for the consolidated defect record.
+
+============================================================
+ PRESERVED CONTENT: Original docs/CHANGELOG.md content preserved
+============================================================
+
+# CHANGELOG
+
+Documentation goes here.
+
+
+---
+
+## 2026-08-23 — Analytics, Provenance, Canonical Identity
+
+- Added GET /api/stats/dashboard
+- Added GET /api/provenance/audit
+- Added controlled POST /api/provenance/normalize-source-username
+- Migrated schema 4 → 5
+- Added canonical_players + player_aliases
+- Normalized games.source_username for 14,916 games
+- Exposed canonical identity to analytics/frontend
+
+
+---
+
+## 2026-08-23 — Workspace Separation
+
+- Documented active workspace vs historical archive separation.
+- Historical rollback/experimental material is moved, not deleted.
+- Active runtime keeps current source, docs, frontend, DB, model, tree, and supported training assets.

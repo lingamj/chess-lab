@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chess AI – Control</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;padding:10px}
+h2{color:#facc15;margin-bottom:8px}
+.tab-bar{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.tab-bar button{padding:8px 14px;border:none;border-radius:8px;background:#1e293b;color:#cbd5e1;font-weight:600;cursor:pointer}
+.tab-bar button.active{background:#2563eb;color:#fff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.panel{background:#1e293b;border-radius:12px;padding:12px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input,textarea,select{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:6px 8px;color:#e2e8f0;font-size:13px;width:100%}
+button{padding:6px 12px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer;white-space:nowrap}
+button.secondary{background:#334155}
+button.copy-btn{background:#ca8a04;font-size:11px;margin-top:4px}
+textarea.log-view{resize:vertical;min-height:100px;max-height:250px;font-size:11px;font-family:monospace;margin-top:4px}
+</style>
+</head>
+<body>
+<h2>♟️ Chess AI – Control</h2>
+<div class="tab-bar">
+  <button class="active" data-tab="analyze">Analyze</button>
+  <button data-tab="train">Training</button>
+  <button data-tab="import">Import</button>
+  <button data-tab="logs">Logs</button>
+  <button id="copyLastErrorBtn" disabled>Copy last error</button>
+</div>
+
+<!-- Analyze -->
+<div id="tab-analyze" class="tab-content active">
+  <div class="panel">
+    <strong>Engine Analysis</strong>
+    <textarea id="analyzeFen" placeholder="FEN (empty = start position)"></textarea>
+    <div class="row" style="margin-top:4px">
+      <input id="analyzeTime" type="number" value="5000" style="width:80px">
+      <button id="analyzeBtn">Analyze</button>
+    </div>
+    <textarea id="analyzeOut" class="log-view" readonly style="display:none;margin-top:4px"></textarea>
+    <button class="copy-btn" id="copyAnalyzeBtn" style="display:none">Select & Copy</button>
+  </div>
+</div>
+
+<!-- Training -->
+<div id="tab-train" class="tab-content">
+  <div class="panel">
+    <strong>Training</strong>
+    <select id="trainType">
+      <option value="merge">Merge & Train (PGN+Stockfish)</option>
+      <option value="selfplay">Self-Play</option>
+      <option value="stockfish_gen">Stockfish Data</option>
+    </select>
+    <div class="row" style="margin-top:4px">
+      <input id="trainEpochs" type="number" value="10" placeholder="Epochs" style="width:80px">
+      <input id="trainLR" type="number" value="0.001" step="0.001" placeholder="LR" style="width:100px">
+      <input id="trainGames" type="number" value="50" placeholder="Games" style="width:80px">
+      <input id="trainPositions" type="number" value="200" placeholder="Positions" style="width:100px">
+    </div>
+    <button id="startTrainBtn">Start Training</button>
+    <div id="trainStatus" style="margin-top:4px"></div>
+  </div>
+</div>
+
+<!-- Import -->
+<div id="tab-import" class="tab-content">
+  <div class="panel">
+    <strong>Import Games</strong>
+    <select id="importSource">
+      <option value="lichess">Lichess</option>
+      <option value="chesscom">Chess.com</option>
+    </select>
+    <input id="importUsername" placeholder="Username" style="margin-top:4px">
+    <button id="startImportBtn" style="margin-top:4px">Import</button>
+    <div id="importStatus" style="margin-top:4px"></div>
+  </div>
+</div>
+
+<!-- Logs -->
+<div id="tab-logs" class="tab-content">
+  <div class="panel">
+    <strong>Logs</strong>
+    <button id="refreshLogsBtn" class="secondary">Refresh</button>
+    <div id="logsContent"></div>
+  </div>
+</div>
+
+<script>
+let lastError = '';
+
+// Tabs
+document.querySelectorAll('.tab-bar button[data-tab]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button[data-tab]').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  document.getElementById('tab-' + b.dataset.tab).classList.add('active');
+}));
+
+// ---------- Safe copy helper ----------
+function selectAndCopyTextarea(textareaId) {
+  const ta = document.getElementById(textareaId);
+  if (!ta) return;
+  ta.select();
+  ta.focus();
+  try {
+    // Try modern clipboard API first
+    navigator.clipboard.writeText(ta.value);
+    alert('Copied to clipboard!');
+  } catch (e) {
+    // Fallback: let the user manually copy after selecting
+    alert('Text selected. Long‑press and choose Copy.');
+  }
+}
+
+// ---------- Engine ----------
+document.getElementById('analyzeBtn').addEventListener('click', async () => {
+  const fen = document.getElementById('analyzeFen').value.trim() || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  const time = parseInt(document.getElementById('analyzeTime').value) || 5000;
+  const out = document.getElementById('analyzeOut');
+  const copyBtn = document.getElementById('copyAnalyzeBtn');
+  out.style.display = 'block'; out.value = 'Thinking...'; copyBtn.style.display = 'none';
+  try {
+    const r = await fetch('/api/analyze', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({fen, movetime:time})});
+    const d = await r.json();
+    out.value = d.info + '\n' + d.bestmove;
+    copyBtn.style.display = 'inline-block';
+  } catch(e) {
+    out.value = 'Error: ' + e.message;
+    lastError = e.message;
+    document.getElementById('copyLastErrorBtn').disabled = false;
+    copyBtn.style.display = 'inline-block';
+  }
+});
+document.getElementById('copyAnalyzeBtn').addEventListener('click', () => selectAndCopyTextarea('analyzeOut'));
+
+// ---------- Training ----------
+document.getElementById('startTrainBtn').addEventListener('click', async () => {
+  const type = document.getElementById('trainType').value;
+  const epochs = document.getElementById('trainEpochs').value;
+  const lr = document.getElementById('trainLR').value;
+  const games = document.getElementById('trainGames').value;
+  const positions = document.getElementById('trainPositions').value;
+  const status = document.getElementById('trainStatus');
+  status.textContent = 'Starting...';
+  try {
+    await fetch('/api/train', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type, epochs, lr, games, positions})});
+    status.textContent = 'Started. Check Logs tab.';
+  } catch(e) { status.textContent = 'Error: ' + e.message; lastError = e.message; document.getElementById('copyLastErrorBtn').disabled = false; }
+});
+
+// ---------- Import ----------
+document.getElementById('startImportBtn').addEventListener('click', async () => {
+  const source = document.getElementById('importSource').value;
+  const username = document.getElementById('importUsername').value.trim();
+  if (!username) { alert('Enter username'); return; }
+  const status = document.getElementById('importStatus');
+  status.textContent = 'Importing...';
+  try {
+    await fetch('/api/import', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({source, username})});
+    status.textContent = 'Started. Check Logs tab.';
+  } catch(e) { status.textContent = 'Error: ' + e.message; lastError = e.message; document.getElementById('copyLastErrorBtn').disabled = false; }
+});
+
+// ---------- Logs (with textarea + select/copy) ----------
+document.getElementById('refreshLogsBtn').addEventListener('click', async () => {
+  const r = await fetch('/api/logs');
+  const d = await r.json();
+  const c = document.getElementById('logsContent');
+  if (!Object.keys(d).length) { c.innerHTML = 'No logs.'; return; }
+  c.innerHTML = '';
+  let idx = 0;
+  for (const [name, content] of Object.entries(d)) {
+    const div = document.createElement('div');
+    div.style.marginBottom = '10px';
+    const strong = document.createElement('strong');
+    strong.textContent = name;
+    div.appendChild(strong);
+    const textarea = document.createElement('textarea');
+    textarea.className = 'log-view';
+    textarea.readOnly = true;
+    textarea.id = 'logArea' + idx;
+    textarea.value = content;
+    div.appendChild(textarea);
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = 'Select & Copy';
+    btn.addEventListener('click', () => selectAndCopyTextarea('logArea' + idx));
+    div.appendChild(btn);
+    c.appendChild(div);
+    idx++;
+  }
+});
+
+// ---------- Copy last error ----------
+document.getElementById('copyLastErrorBtn').addEventListener('click', () => {
+  if (lastError) {
+    navigator.clipboard.writeText(lastError).catch(() => {
+      prompt('Copy this error:', lastError);
+    });
+  }
+});
+</script>
+</body>
+</html>

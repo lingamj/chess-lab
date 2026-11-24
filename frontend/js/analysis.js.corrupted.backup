@@ -1,0 +1,32 @@
+
+    try {
+        const data = await api('/api/analyze', {
+            method: 'POST',
+            body: JSON.stringify({ fen })
+        });
+        state.analysis = {
+            score: data.score,
+            depth: data.depth,
+            bestmove: data.best_move,
+            pv: data.pv || [],
+            multiPv: data.multipv || [],
+        };
+        document.getElementById('eval-display').textContent = `Score: ${data.score}`;
+        document.getElementById('best-move').textContent = `Best: ${data.best_move}`;
+        document.getElementById('pv-line').textContent = `PV: ${(data.pv || []).join(' ')}`;
+        if (data.cp !== undefined) {
+            state.evaluations.push(data.cp);
+            state.depths.push(data.depth);
+            if (state.evaluations.length > 50) state.evaluations.shift();
+            if (state.depths.length > 50) state.depths.shift();
+        }
+        state.arrows = (data.multipv || []).slice(0, 3).map((m, i) => {
+            const uci = m.move;
+            const from = uci.slice(0, 2);
+            const to = uci.slice(2, 4);
+            const weight = 100 - i * 30;
+            const colors = ['#00ff00', '#ffaa00', '#ff0000'];
+            return { from, to, weight, color: colors[i] || '#888' };
+        });
+    } catch (e) {}
+}

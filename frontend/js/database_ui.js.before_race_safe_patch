@@ -1,0 +1,401 @@
+/* Database-backed dashboard/navigation layer.
+ * Keeps SQLite as the source of truth for games, stats and node details.
+ */
+(function () {
+  'use strict';
+
+  const DB = {
+    games: [],
+    byId: new Map(),
+    loaded: false,
+    requestId: 0,
+  };
+  window._DB_GAMES = DB.games;
+  window._DB_GAME_BY_ID = DB.byId;
+  window._DB_LOADED = false;
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, ch => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;'
+    }[ch]));
+  }
+
+  function gameFromRow(row) {
+    const firstMoves = String(row.first_moves || '').trim();
+    const moves = firstMoves ? firstMoves.split(/\s+/) : [];
+    return {
+      id: Number(row.id),
+      white: row.white || '',
+      black: row.black || '',
+      result: row.result || '',
+      whiteElo: Number(row.white_elo || 0),
+      blackElo: Number(row.black_elo || 0),
+      date: row.date || '',
+      moves_count: Number(row.moves_count || 0),
+      first_moves: moves,
+      eco: row.eco || '',
+      opening: row.opening || '',
+      termination: row.termination || '',
+      platform_game_id: row.platform_game_id || null,
+      source: row.source || ''
+    };
+  }
+
+  function setSummary(text) {
+    const el = document.getElementById('gamesSummary');
+    if (el) el.textContent = text;
+  }
+
+  function renderGamesTable() {
+    const body = document.getElementById('gamesTableBody');
+    if (!body) return;
+    body.innerHTML = '';
+    if (!DB.games.length) {
+      setSummary('No games loaded.');
+      return;
+    }
+    const col = window._gamesSortCol || 'index';
+    const dir = window._gamesSortDir === 'desc' ? -1 : 1;
+    const rows = DB.games.slice();
+    rows.sort((a, b) => {
+      let va, vb;
+      if (col === 'index') { va = a.id; vb = b.id; }
+      else if (col === 'white') { va = a.white; vb = b.white; }
+      else if (col === 'black') { va = a.black; vb = b.black; }
+      else if (col === 'result') { va = a.result; vb = b.result; }
+      else if (col === 'whiteElo') { va = a.whiteElo; vb = b.whiteElo; }
+      else if (col === 'blackElo') { va = a.blackElo; vb = b.blackElo; }
+      else if (col === 'date') { va = a.date; vb = b.date; }
+      else if (col === 'moves') { va = a.moves_count; vb = b.moves_count; }
+      else { va = a.first_moves.join(' '); vb = b.first_moves.join(' '); }
+      if (typeof va === 'string') return va.localeCompare(vb) * dir;
+      return (va - vb) * dir;
+    });
+
+    for (let i = 0; i < rows.length; i++) {
+      const g = rows[i];
+      const tr = document.createElement('tr');
+      tr.dataset.gameId = String(g.id);
+      tr.innerHTML = `<td>${i + 1}</td><td>${esc(g.white)}</td><td>${esc(g.black)}</td><td>${esc(g.result)}</td><td>${g.whiteElo || ''}</td><td>${g.blackElo || ''}</td><td>${esc(g.date)}</td><td>${g.moves_count ? Math.ceil(g.moves_count / 2) : ''}</td><td class="first-moves-cell">${esc(g.first_moves.slice(0, 12).join(' '))}</td>`;
+      tr.addEventListener('click', () => loadDatabaseGame(g.id));
+      body.appendChild(tr);
+    }
+    setSummary(`${rows.length} games loaded from database. Click a row to load the full game.`);
+  }
+
+  function resultCounts(games) {
+    let w = 0, b = 0, d = 0;
+    games.forEach(g => {
+      if (g.result === '1-0') w++;
+      else if (g.result === '0-1') b++;
+      else if (g.result === '1/2-1/2') d++;
+    });
+    return { w, b, d };
+  }
+
+  function renderStats() {
+    const games = DB.games;
+    const overview = document.getElementById('statsOverview');
+    const results = document.getElementById('statsResults');
+    const yearsEl = document.getElementById('statsYears');
+    const firstMovesEl = document.getElementById('statsFirstMoves');
+    const playersEl = document.getElementById('statsPlayers');
+    if (!games.length) {
+      if (overview) overview.textContent = 'No games loaded.';
+      if (results) results.textContent = '';
+      if (yearsEl) yearsEl.textContent = '';
+      if (firstMovesEl) firstMovesEl.textContent = '';
+      if (playersEl) playersEl.textContent = '';
+      if (typeof updateCharts === 'function') updateCharts({}, 0, 0, 0, 0);
+      return;
+    }
+
+    const rc = resultCounts(games);
+    const years = {};
+    const first = {};
+    const whitePlayers = {};
+    const blackPlayers = {};
+    let sumPly = 0;
+    let minPly = Infinity;
+    let maxPly = 0;
+    games.forEach(g => {
+      const y = String(g.date || '').slice(0, 4);
+      if (/^\d{4}$/.test(y)) years[y] = (years[y] || 0) + 1;
+      const fm = g.first_moves[0];
+      if (fm) first[fm] = (first[fm] || 0) + 1;
+      if (g.white) whitePlayers[g.white] = (whitePlayers[g.white] || 0) + 1;
+      if (g.black) blackPlayers[g.black] = (blackPlayers[g.black] || 0) + 1;
+      sumPly += g.moves_count;
+      minPly = Math.min(minPly, g.moves_count);
+      maxPly = Math.max(maxPly, g.moves_count);
+    });
+
+    const avgMoves = (sumPly / Math.max(games.length, 1) / 2).toFixed(1);
+    const minMoves = isFinite(minPly) ? (minPly / 2).toFixed(1) : '0.0';
+    const maxMoves = (maxPly / 2).toFixed(1);
+    const decisive = rc.w + rc.b;
+    const wScore = ((rc.w + rc.d * 0.5) / games.length * 100).toFixed(1);
+    const bScore = ((rc.b + rc.d * 0.5) / games.length * 100).toFixed(1);
+    const topFirst = Object.entries(first).sort((a,b) => b[1]-a[1]).slice(0,5).map(([m,c]) => `${m} (${c})`).join(', ') || '—';
+    const topW = Object.entries(whitePlayers).sort((a,b) => b[1]-a[1]).slice(0,5).map(([p,c]) => `${p} (${c})`).join(', ') || '—';
+    const topB = Object.entries(blackPlayers).sort((a,b) => b[1]-a[1]).slice(0,5).map(([p,c]) => `${p} (${c})`).join(', ') || '—';
+    const yearText = Object.keys(years).sort().map(y => `${y}: ${years[y]}`).join(', ') || 'No date tags found.';
+
+    overview.innerHTML = `<strong>Total games:</strong> ${games.length}<br><strong>Typical game length:</strong> ~${avgMoves} moves (shortest ${minMoves}, longest ${maxMoves})<br>Decisive games: ${((decisive / games.length) * 100).toFixed(1)}%`;
+    results.innerHTML = `<strong>Results breakdown</strong><br>White wins: ${rc.w} (${(rc.w/games.length*100).toFixed(1)}%), Black wins: ${rc.b} (${(rc.b/games.length*100).toFixed(1)}%), Draws: ${rc.d} (${(rc.d/games.length*100).toFixed(1)}%).<br>White score: ${wScore}% • Black score: ${bScore}%`;
+    yearsEl.innerHTML = `<strong>Activity by year</strong><br>${esc(yearText)}`;
+    firstMovesEl.innerHTML = `<strong>Most common first moves</strong><br>${esc(topFirst)}`;
+    playersEl.innerHTML = `<strong>Main players / opponents</strong><br><em>As White:</em> ${esc(topW)}<br><em>As Black:</em> ${esc(topB)}`;
+    if (typeof updateCharts === 'function') updateCharts(years, rc.w, rc.b, rc.d, games.length);
+  }
+
+  function renderInsights() {
+    const ratingEl = document.getElementById('insightsRatingAdv');
+    const ecoEl = document.getElementById('insightsECO');
+    const games = DB.games;
+    if (!games.length) { ratingEl.textContent = 'No games loaded.'; ecoEl.textContent = ''; return; }
+    const buckets = { wHi:{w:0,b:0,d:0}, bHi:{w:0,b:0,d:0}, eq:{w:0,b:0,d:0} };
+    const moveMap = new Map(); const ecoMap = new Map();
+    games.forEach(g => {
+      const we = g.whiteElo, be = g.blackElo;
+      const b = !we || !be ? buckets.eq : we > be ? buckets.wHi : be > we ? buckets.bHi : buckets.eq;
+      if (g.result === '1-0') b.w++; else if (g.result === '0-1') b.b++; else if (g.result === '1/2-1/2') b.d++;
+      const fm = g.first_moves[0];
+      if (fm) { if (!moveMap.has(fm)) moveMap.set(fm, {count:0, score:0}); const o = moveMap.get(fm); o.count++; if (g.result === '1-0') o.score += 1; else if (g.result === '1/2-1/2') o.score += .5; }
+      if (g.eco) ecoMap.set(g.eco, (ecoMap.get(g.eco) || 0) + 1);
+    });
+    const scorePct = x => { const t=x.w+x.b+x.d; return t ? ((x.w+.5*x.d)/t*100).toFixed(1) : '—'; };
+    const moveStats = Array.from(moveMap.entries()).map(([m,v]) => ({m, count:v.count, score:v.score/v.count*100})).filter(x=>x.count>=5).sort((a,b)=>b.score-a.score);
+    const best = moveStats[0], worst = moveStats[moveStats.length-1];
+    ratingEl.innerHTML = `<strong>Result by rating advantage</strong><br>White higher: W ${buckets.wHi.w} D ${buckets.wHi.d} B ${buckets.wHi.b} → White score ${scorePct(buckets.wHi)}%<br>Black higher: W ${buckets.bHi.w} D ${buckets.bHi.d} B ${buckets.bHi.b} → White score ${scorePct(buckets.bHi)}%<br>Equal/unknown: W ${buckets.eq.w} D ${buckets.eq.d} B ${buckets.eq.b}<br><br><strong>First move performance</strong><br>Best: ${best ? esc(best.m) + ' (' + best.score.toFixed(1) + '%)' : '—'}<br>Weakest: ${worst ? esc(worst.m) + ' (' + worst.score.toFixed(1) + '%)' : '—'}`;
+    const topEco = Array.from(ecoMap.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([e,c])=>`${e} (${c})`).join(', ');
+    ecoEl.innerHTML = `<strong>Top ECO codes:</strong> ${esc(topEco || 'No ECO tags found.')}`;
+  }
+
+  function renderOpenings() {
+    const body = document.getElementById('openingsTableBody');
+    const summary = document.getElementById('openingsSummary');
+    const stats = document.getElementById('openingsStats');
+    if (!body) return;
+    body.innerHTML = '';
+    if (!DB.games.length) { summary.textContent = 'No openings yet (no games loaded).'; stats.textContent = ''; return; }
+    const select = document.getElementById('openingsPlySelect');
+    const plies = Math.max(1, parseInt(select?.value || '12', 10));
+    const map = new Map();
+    DB.games.forEach(g => {
+      if (g.first_moves.length < plies) return;
+      const arr = g.first_moves.slice(0, plies); const key = arr.join(' ');
+      let o = map.get(key);
+      if (!o) { o = {key, ids:[], w:0,d:0,b:0,wE:0,wN:0,bE:0,bN:0,plies:0}; map.set(key,o); }
+      o.ids.push(g.id);
+      if (g.result === '1-0') o.w++; else if (g.result === '0-1') o.b++; else if (g.result === '1/2-1/2') o.d++;
+      if (g.whiteElo) { o.wE += g.whiteElo; o.wN++; } if (g.blackElo) { o.bE += g.blackElo; o.bN++; }
+      o.plies += g.moves_count;
+    });
+    let rows = Array.from(map.values());
+    const col = window._openingsSortCol || 'games'; const dir = window._openingsSortDir === 'asc' ? 1 : -1;
+    rows.sort((a,b) => {
+      const va = col==='line'?a.key:col==='wWins'?a.w:col==='draws'?a.d:col==='bWins'?a.b:col==='wElo'?(a.wN?a.wE/a.wN:0):col==='bElo'?(a.bN?a.bE/a.bN:0):col==='avgMoves'?(a.plies/a.ids.length):a.ids.length;
+      const vb = col==='line'?b.key:col==='wWins'?b.w:col==='draws'?b.d:col==='bWins'?b.b:col==='wElo'?(b.wN?b.wE/b.wN:0):col==='bElo'?(b.bN?b.bE/b.bN:0):col==='avgMoves'?(b.plies/b.ids.length):b.ids.length;
+      return typeof va==='string' ? va.localeCompare(vb)*dir : (va-vb)*dir;
+    });
+    rows.slice(0,500).forEach((o, idx) => {
+      const total = o.ids.length; const line = o.key.split(' ').map((m,i)=>(i%2===0?`${Math.floor(i/2)+1}. `:'')+m).join(' ');
+      const tr = document.createElement('tr'); tr.dataset.openingIds = o.ids.join(',');
+      tr.innerHTML = `<td>${idx+1}</td><td>${esc(line)}</td><td>${total}</td><td>${o.w}</td><td>${o.d}</td><td>${o.b}</td><td>${(o.w/total*100).toFixed(1)}</td><td>${(o.d/total*100).toFixed(1)}</td><td>${(o.b/total*100).toFixed(1)}</td><td>${o.wN?Math.round(o.wE/o.wN):'—'}</td><td>${o.bN?Math.round(o.bE/o.bN):'—'}</td><td>${(o.plies/total/2).toFixed(1)}</td>`;
+      tr.addEventListener('click', () => {
+        document.querySelectorAll('tr.openings-row-selected').forEach(el => el.classList.remove('openings-row-selected'));
+        tr.classList.add('openings-row-selected');
+        const firstId = o.ids[0];
+        const g = DB.byId.get(firstId);
+        if (g) loadDatabaseGame(firstId, plies);
+        window._SELECTED_OPENING_LINE = o.key;
+        const copy = document.getElementById('copyOpeningLineBtn'); if (copy) copy.disabled = false;
+      });
+      body.appendChild(tr);
+    });
+    summary.textContent = `${rows.length} opening lines at ${plies} plies.`;
+    stats.textContent = `Database-backed grouping from ${DB.games.length} games.`;
+  }
+
+  async function loadDatabaseGame(gameId, stopAtPly) {
+    try {
+      const res = await fetch(`/api/game/${encodeURIComponent(gameId)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const moves = Array.isArray(data.moves) ? data.moves.map(m => m.san).filter(Boolean) : [];
+      if (stopAtPly) moves.splice(stopAtPly);
+      window._LINE_MOVES_SAN = moves;
+      window._CURRENT_PLY = moves.length;
+      window._LINE_SOURCE = 'game-db';
+      window._DB_CURRENT_GAME_ID = Number(gameId);
+      window._DB_CURRENT_GAME = data;
+      window._CURRENT_NODE = window._CURRENT_NODE || window._TREE;
+      if (typeof unfreezeCurrentLine === 'function') unfreezeCurrentLine();
+      window.batchAutoFollow = true;
+      updateBoardFromLine();
+      await renderDatabaseNodeDetailsForFen(stateToFEN(window._CURRENT_STATE));
+      document.querySelectorAll('tr.games-row-selected').forEach(el => el.classList.remove('games-row-selected'));
+      const row = document.querySelector(`tr[data-game-id="${CSS.escape(String(gameId))}"]`);
+      if (row) row.classList.add('games-row-selected');
+    } catch (e) {
+      console.error('Database game load failed:', e);
+      const el = document.getElementById('gamesSummary'); if (el) el.textContent = `Game load failed: ${e.message}`;
+    }
+  }
+  window.loadDatabaseGame = loadDatabaseGame;
+
+  async function renderDatabaseNodeDetailsForFen(fen, node) {
+    const req = ++DB.requestId;
+    const details = document.getElementById('nodeDetails');
+    const list = document.getElementById('nodeGameList');
+    const bucketsRoot = document.getElementById('nodeResultBuckets');
+    const sample = document.getElementById('sampleGames');
+    if (!details || !list || !bucketsRoot) return;
+    details.innerHTML = '<div class="small-muted">Loading database node details…</div>';
+    try {
+      const res = await fetch('/api/node_games?fen=' + encodeURIComponent(fen));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (req !== DB.requestId) return;
+      const path = node ? getPathFromNode(node) : [];
+      const count = Number(data.count || 0);
+      const w = Number(data.white_wins || 0), b = Number(data.black_wins || 0), d = Number(data.draws || 0);
+      const fenText = data.fen || fen;
+      details.innerHTML = `<div class="small-muted"><strong>${node?.move ? `Move: ${esc(node.move)}` : 'Position'}</strong></div><div class="small-muted">Games reaching this node: <strong>${count}</strong></div><div class="small-muted">White score: ${count ? ((w + .5*d)/count*100).toFixed(1) : '0.0'}% • Black score: ${count ? ((b + .5*d)/count*100).toFixed(1) : '0.0'}%</div><div class="small-muted" style="margin-top:4px;">Line: ${esc(path.join(' ')) || 'Start position'}</div><div class="small-muted" style="margin-top:4px;">FEN: ${esc(fenText)}</div>`;
+      list.innerHTML = '';
+      const games = Array.isArray(data.games) ? data.games : [];
+      const summary = document.createElement('div'); summary.className = 'small-muted'; summary.textContent = `Games in this node: ${count}`; list.appendChild(summary);
+      const sub = document.createElement('div');
+      games.forEach((g, i) => { const e = document.createElement('div'); e.className = 'node-game-entry'; e.textContent = `${i+1}. #${g.id} ${g.white} vs ${g.black} (${g.result})`; e.addEventListener('click', () => loadDatabaseGame(g.id)); sub.appendChild(e); });
+      if (games.length < count) { const more = document.createElement('div'); more.className='small-muted'; more.textContent=`+ ${count-games.length} more…`; sub.appendChild(more); }
+      list.appendChild(sub);
+
+      bucketsRoot.innerHTML = '<div class="node-results-wrapper"><div class="node-results-title">Games by result at this node</div><div class="node-results-buckets">' +
+        `<div class="node-results-column"><h4>White wins</h4><div class="small-muted">${w}</div></div>` +
+        `<div class="node-results-column"><h4>Black wins</h4><div class="small-muted">${b}</div></div>` +
+        `<div class="node-results-column"><h4>Draws</h4><div class="small-muted">${d}</div></div></div></div>`;
+      if (sample) sample.value = (data.sample_pgns || []).join('\n\n---\n\n');
+    } catch (e) {
+      if (req === DB.requestId) {
+        details.innerHTML = `<div class="small-muted">Node details unavailable: ${esc(e.message)}</div>`;
+        list.textContent = '';
+        bucketsRoot.textContent = '';
+      }
+    }
+  }
+  window.renderDatabaseNodeDetailsForFen = renderDatabaseNodeDetailsForFen;
+
+  window.renderDatabaseNodeDetails = async function(node) {
+    const fen = node ? stateToFEN(stateFromNode(node)) : (window._CURRENT_STATE ? stateToFEN(window._CURRENT_STATE) : '');
+    return renderDatabaseNodeDetailsForFen(fen, node);
+  };
+
+  async function loadDatabaseDashboard() {
+    try {
+      const res = await fetch('/api/database_games');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const games = (data.games || []).map(gameFromRow);
+      DB.games.length = 0; DB.games.push(...games);
+      DB.byId.clear(); games.forEach(g => DB.byId.set(g.id, g));
+      window._DB_GAMES = DB.games;
+      window._DB_GAME_BY_ID = DB.byId;
+      DB.loaded = true;
+      window._DB_LOADED = true;
+      renderGamesTable(); renderStats(); renderInsights(); renderOpenings();
+      const sourceEl = document.getElementById('gamesSummary');
+      if (sourceEl) sourceEl.dataset.source = 'database';
+      if (window._CURRENT_NODE) renderDatabaseNodeDetails(window._CURRENT_NODE);
+    } catch (e) {
+      console.error('Database dashboard load failed:', e);
+      setSummary(`Database dashboard failed: ${e.message}`);
+    }
+  }
+  window.loadDatabaseDashboard = loadDatabaseDashboard;
+
+  // Board.js functions delegate here when database mode is active.
+  const oldRebuild = window.rebuildGamesTable;
+  window.rebuildGamesTable = function () {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) return renderGamesTable();
+    return oldRebuild ? oldRebuild() : undefined;
+  };
+  const oldStats = window.updateStats;
+  window.updateStats = function () {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) return renderStats();
+    return oldStats ? oldStats() : undefined;
+  };
+  const oldInsights = window.updateInsights;
+  window.updateInsights = function () {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) return renderInsights();
+    return oldInsights ? oldInsights() : undefined;
+  };
+  const oldOpenings = window.updateOpeningsList;
+  window.updateOpeningsList = function () {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) return renderOpenings();
+    return oldOpenings ? oldOpenings() : undefined;
+  };
+  const oldNodeDetails = window.renderNodeDetails;
+  window.renderNodeDetails = function (node) {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) return renderDatabaseNodeDetails(node);
+    return oldNodeDetails ? oldNodeDetails(node) : undefined;
+  };
+
+  function wireImportButtons() {
+    async function runImport(source) {
+      const username = (document.getElementById('import-username')?.value || '').trim();
+      const status = document.getElementById('import-status');
+      if (!username) { if (status) status.textContent = '⚠️ Please enter a username.'; return; }
+      if (status) status.textContent = `⏳ Downloading and importing ${source} games for ${username}…`;
+      try {
+        const res = await fetch('/api/import_games', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({source, username}) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        if (status) status.textContent = `✅ ${data.message || 'Import complete.'}`;
+        await loadDatabaseDashboard();
+        if (typeof initDatabaseRepertoire === 'function') await initDatabaseRepertoire();
+      } catch (e) {
+        if (status) status.textContent = `❌ ${e.message}`;
+      }
+    }
+    document.getElementById('import-lichess')?.addEventListener('click', () => runImport('lichess'));
+    document.getElementById('import-chesscom')?.addEventListener('click', () => runImport('chesscom'));
+  }
+
+  function wireCopyOpening() {
+    document.getElementById('copyOpeningLineBtn')?.addEventListener('click', () => {
+      const text = window._SELECTED_OPENING_LINE || '';
+      if (!text) return;
+      const formatted = text.split(' ').map((m,i)=>(i%2===0?`${Math.floor(i/2)+1}. `:'')+m).join(' ');
+      navigator.clipboard?.writeText(formatted).then(() => {
+        const btn = document.getElementById('copyOpeningLineBtn');
+        if (btn) { const old=btn.textContent; btn.textContent='Copied ✓'; setTimeout(()=>btn.textContent=old,900); }
+      }).catch(() => prompt('Opening line:', formatted));
+    });
+  }
+
+  function wireDatabaseNavigationGuards() {
+    // DB mode uses the actual selected game line and never freezes it on First/Prev/Next.
+    ['firstBtn','prevBtn','nextBtn','lastBtn'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', () => {
+        if (window._DATA_SOURCE !== 'database') return;
+        if (typeof unfreezeCurrentLine === 'function') unfreezeCurrentLine();
+        window.batchAutoFollow = true;
+        setTimeout(() => {
+          if (window._DB_CURRENT_GAME_ID) {
+            const game = DB.byId.get(window._DB_CURRENT_GAME_ID);
+            if (game) renderDatabaseNodeDetailsForFen(stateToFEN(window._CURRENT_STATE), window._CURRENT_NODE);
+          }
+        }, 0);
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    wireImportButtons();
+    wireCopyOpening();
+    wireDatabaseNavigationGuards();
+    // Give board.js a moment to initialize its tree, then fill all database panels.
+    setTimeout(loadDatabaseDashboard, 0);
+  });
+})();

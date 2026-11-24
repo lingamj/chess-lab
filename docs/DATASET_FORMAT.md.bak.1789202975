@@ -1,0 +1,18 @@
+# DATASET_FORMAT
+
+
+- schema_version: 5
+- games: 14,916
+- game_moves: 1,031,269
+- source_username NULL: 0
+
+## Provenance Mapping
+- lichess → jothilingam
+- bulk_import → jothi_lingam
+- import_test → jothi_lingam
+- chesscom → jothi_lingam
+
+Canonical identity:
+- jothi
+  - jothilingam → lichess
+  - jothi_lingam → chesscom

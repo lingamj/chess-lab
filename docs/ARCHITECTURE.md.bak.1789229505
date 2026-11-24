@@ -1,0 +1,179 @@
+# ARCHITECTURE
+
+
+Browser frontend → Flask API → SQLite/workers/engine.
+
+Termux is the runtime/development environment. The frontend is the normal control plane.
+
+## Identity Layers
+1. Historical game record: games.white / games.black
+2. Source account: games.source / games.source_username
+3. Canonical person: canonical_players / player_aliases
+
+Historical names are not overwritten.
+
+
+---
+
+## Project Workspace Separation — 2026-08-23
+
+The project now distinguishes between the active workspace and historical material.
+
+- Active workspace: `~/chess_ai/`
+- Historical archive: `~/chess_ai_historical_2026-08-23/`
+
+The historical archive contains rollback snapshots, obsolete implementations,
+experimental/debug files, generated diagnostics, and previous model/database versions.
+
+Historical files are moved, not deleted, so rollback/reference material remains
+available outside the active runtime workspace.
+
+The active workspace retains:
+
+- production source
+- current frontend
+- current documentation
+- evaluation modules
+- supported tests/scripts
+- production database
+- active models
+- opening-tree/runtime artifacts
+- supported training/import assets
+
+Historical archive contents must not be treated as active runtime dependencies.
+
+---
+
+## 2026-09-11 — Current Architecture (Post-Patch-A)
+
+This section records the current architecture as verified against the live
+workspace. It does not replace the historical sections above.
+
+### Layered view
+
+    Browser frontend  ──►  Flask API (web_control.py)
+                                │
+                                ├──► SearchEngine (search.py)
+                                │       └── DualNet (nn.py) ── chess_nn.pkl
+                                │
+                                ├──► Opening tree (opening.py, build_tree.py)
+                                │
+                                ├──► SQLite (chess_ai.db)
+                                │
+                                └──► Sync/import workers
+                                        (pgn_learner.py, database_v2.py)
+
+Termux is the runtime environment. The browser frontend is the normal
+control plane.
+
+### Component inventory
+
+| Layer | File | Role |
+|---|---|---|
+| Board | `board.py` | Position representation, move generation, make/undo, hashing, repetition tracking |
+| Move indexing | `move_helpers.py` | `NUM_MOVES = 20480`, move↔index round-trip, perft |
+| Evaluation | `static_eval.py` | Static evaluation; `combined_eval(board)` is White-perspective in the validated investigation |
+| Neural network | `nn.py` | `DualNet`; loads `chess_nn.pkl`; value head + policy head |
+| Search | `search.py` | `SearchEngine`; four-value public return |
+| Parallel search | `parallel_search.py` | Multi-board search wrapper; four-value consumer |
+| UCI | `uci_engine.py` | UCI engine; four-value consumer |
+| Flask API | `web_control.py` | HTTP endpoints and frontend serving |
+| Database | `chess_ai.db` | Authoritative SQLite store |
+| DB helpers | `database_v2.py` | Database/import/provenance support |
+| PGN import | `pgn_learner.py`, `pgn_utils_v2.py` | PGN/game-import support |
+
+### Search layer
+
+The active search implementation is documented in `SEARCH_ALGORITHM.md`.
+Its architecture, in brief:
+
+- `SearchResult` carries explicit `score`, `bound`, `valid`, `source_type`,
+  `source_depth`.
+- Accepted-root authority fields (`accepted_root_*`) bind the returned move
+  and score to one accepted authoritative iteration.
+- The transposition table stores provenance fields
+  (`provenance_version`, `source_type`, `source_depth`) and validates them
+  on read and write.
+- Quiescence results are excluded from exact-TT eligibility (Option B).
+- PV extraction is provenance-gated.
+
+Public contract:
+
+    search(board, time_limit=3000, depth=None)
+        -> (best_move, best_score, current_depth, nodes)
+
+### API layer
+
+The active API is served by `web_control.py`. The route surface is
+documented in `API_REFERENCE.md`. 44 unique paths, dominated by:
+
+- Engine analysis (`/api/analyze`, `/api/start_analysis`, `/api/analyze_sf`)
+- Game state (`/api/move`, `/api/human_move`, `/api/current_fen`)
+- Batch and live game control
+- Opening tree and database browse
+- Repertoire and training
+- Import and sync
+- Provenance and statistics
+
+### Database layer
+
+The authoritative database is `~/chess_ai/chess_ai.db`.
+Production checkpoint values currently verified:
+
+- `schema_version = 5`
+- `games = 14916`
+- `game_moves = 1031269`
+- `import_batches = 67`
+- `import_records = 23496`
+- `sync_jobs = 2`
+- `source_username NULL = 0`
+- `canonical_identity = jothi`
+
+`PRAGMA integrity_check` returns `ok`.
+
+### Identity layers
+
+The three-level identity model is preserved:
+
+1. Historical game record (`games.white` / `games.black`)
+2. Source account (`games.source` / `games.source_username`)
+3. Canonical person (`canonical_players` / `player_aliases`)
+
+Historical names are never overwritten.
+
+### Engine / evaluator status
+
+- Patch-A search provenance: implemented and validated.
+- Evaluator perspective/score contract: OPEN.
+- NN value-head validation: OPEN.
+- Strength benchmark: NOT ESTABLISHED.
+- MultiPV: not implemented.
+
+The leaf evaluation path currently combines:
+
+    combined_eval(board) + int(val * NN_SCALE)
+
+`combined_eval` is White-perspective. The NN value head's perspective
+is not yet established. This is the subject of the open evaluator
+investigation; no fix has been applied.
+
+### Workspace rule
+
+The live workspace `~/chess_ai/` is authoritative for current behavior.
+The historical archive `~/chess_ai_historical_2026-08-23/` is reference and
+rollback material only. Files existing in the archive are not active
+runtime dependencies.
+
+### Non-goals
+
+- MultiPV is not implemented in the current engine.
+- TT state is not persisted as a cross-search statistics/cache artifact.
+- Position-wise historical analytics is planned but not yet part of the
+  implemented runtime architecture.
+
+### Documentation cross-reference
+
+- `SEARCH_ALGORITHM.md` — search contract.
+- `API_REFERENCE.md` — HTTP route surface.
+- `AUDIT_STATUS.md` — current verified state and open items.
+- `ROADMAP.md` — historical phases plus the current cross-cutting tracks.

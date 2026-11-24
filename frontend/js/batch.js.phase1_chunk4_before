@@ -1,0 +1,512 @@
+(function() {
+  function debugMsg(msg) {
+    let d = document.getElementById("debugBox");
+    if (!d) {
+      d = document.createElement("div");
+      d.id = "debugBox";
+      d.style.cssText = "position:fixed;top:0;left:0;right:0;background:#000;color:#0f0;padding:8px;z-index:99999;font-size:14px;white-space:pre-wrap;";
+      document.body.appendChild(d);
+    }
+    d.textContent = msg;
+  }
+
+  const toggleBtn = document.getElementById('modeToggleBtn');
+  const pgnPanel = document.getElementById('test-pgn-panel');
+  const pgnContent = document.getElementById('test-pgn-content');
+  const batchPanel = document.getElementById('test-batch-panel');
+  const startBtn = document.getElementById('start-batch-btn');
+  const stopBtn = document.getElementById('stop-batch-btn');
+window.batchAutoFollow = true;
+let batchTotalMoves = 0;
+  const numGamesInput = document.getElementById('batch-num-games');
+  const depthInput = document.getElementById('batch-depth');
+  const opponentSelect = document.getElementById('batch-opponent');
+  const humanBlackCheckbox = document.getElementById('human-black');
+  const progressDiv = document.getElementById('test-batch-progress');
+  const statsDiv = document.getElementById('test-batch-stats');
+  const rawPgn = document.getElementById('rawPgn');
+
+  let pollMode = 'live';
+  let pollInterval = null, batchPollInterval = null, batchLoaded = false;
+  let humanGameActive = false;
+  window.batchAutoFollow = true;
+  
+  // ---- Override onSquareClick for human mode ----
+  const origOnSquareClick = window.onSquareClick;
+  window.onSquareClick = function(r, c) {
+    if (!humanGameActive) {
+      if (origOnSquareClick) origOnSquareClick(r, c);
+      return;
+    }
+    const state = window._CURRENT_STATE || window.initialBoardState();
+    const piece = state.board[r][c];
+    if (!window._SELECTED_SQUARE) {
+      if (!piece || pieceColor(piece) !== state.turn) return;
+      window._SELECTED_SQUARE = { r, c };
+      renderBoard(state);
+      return;
+    }
+    const sel = window._SELECTED_SQUARE;
+    if (sel.r === r && sel.c === c) {
+      window._SELECTED_SQUARE = null;
+      renderBoard(state);
+      return;
+    }
+    const moves = generatePseudoMoves(state, state.turn);
+    const cand = moves.filter(m => m.fromR === sel.r && m.fromC === sel.c && m.toR === r && m.toC === c);
+    if (!cand.length) {
+      window._SELECTED_SQUARE = null;
+      renderBoard(state);
+      return;
+    }
+    const legalCand = cand.filter(mv => {
+      const tmp = applyMoveToState(state, mv);
+      return !isKingInCheck(tmp, state.turn);
+    });
+    if (!legalCand.length) {
+      window._SELECTED_SQUARE = null;
+      renderBoard(state);
+      return;
+    }
+    let mv = legalCand[0];
+    if (legalCand.length > 1 && legalCand[0].promotion) {
+      const choice = prompt('Promote pawn to? Type: Q=Queen, R=Rook, B=Bishop, N=Knight', 'Q');
+      const chosen = (choice || 'Q').toUpperCase();
+      mv = legalCand.find(m => m.promotion === chosen) || legalCand[0];
+    }
+    const uci = String.fromCharCode(97 + mv.fromC) + (8 - mv.fromR) +
+                String.fromCharCode(97 + mv.toC) + (8 - mv.toR) +
+                (mv.promotion || '');
+    const fenBefore = stateToFEN(state);
+    window._SELECTED_SQUARE = null;
+
+    fetch('/api/human_move', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ uci: uci, fen: fenBefore })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        alert('Illegal move: ' + data.error);
+        renderBoard(state);
+      } else {
+        if (data.current_fen) {
+          window._CURRENT_STATE = stateFromFEN(data.current_fen);
+          renderBoard(window._CURRENT_STATE);
+        }
+        if (data.pgn) {
+          pgnContent.textContent = data.pgn;
+        }
+        if (data.result) {
+          progressDiv.innerHTML = 'Game ended: ' + data.result;
+          humanGameActive = false;
+        }
+      }
+    })
+    .catch(err => {
+      console.error('Human move failed:', err);
+      renderBoard(state);
+    });
+  };
+
+  function stateFromFEN(fen) {
+    const parts = fen.trim().split(' ');
+    if (parts.length < 4) return window.initialBoardState();
+    const board = Array.from({length:8}, () => Array(8).fill(null));
+    const rows = parts[0].split('/');
+    for (let r = 0; r < 8; r++) {
+      let c = 0;
+      for (const ch of rows[r]) {
+        if (ch >= '1' && ch <= '8') { c += parseInt(ch, 10); }
+        else {
+          const map = { P:'wP',N:'wN',B:'wB',R:'wR',Q:'wQ',K:'wK',
+                       p:'bP',n:'bN',b:'bB',r:'bR',q:'bQ',k:'bK' };
+          board[r][c] = map[ch] || null; c++;
+        }
+      }
+    }
+    const turn = parts[1] === 'w' ? 'w' : 'b';
+    const castling = { wK: parts[2].includes('K'), wQ: parts[2].includes('Q'),
+                       bK: parts[2].includes('k'), bQ: parts[2].includes('q') };
+    let enPassant = null;
+    if (parts[3] !== '-') {
+      const file = parts[3].charCodeAt(0) - 97;
+      const rank = 8 - parseInt(parts[3][1], 10);
+      enPassant = [rank, file];
+    }
+    const halfmove = parts.length >= 5 ? parseInt(parts[4], 10) || 0 : 0;
+    const fullmove = parts.length >= 6 ? parseInt(parts[5], 10) || 1 : 1;
+    return { board, turn, castling, enPassant, lastMove: null,
+             halfmoveClock: halfmove, fullmoveNumber: fullmove };
+  }
+
+  function startLivePolling() {
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(() => {
+      fetch('/api/current_fen')
+        .then(r => r.json())
+        .then(data => { if (data.current_fen && window.batchAutoFollow) { window._CURRENT_STATE = stateFromFEN(data.current_fen); renderBoard(window._CURRENT_STATE); } });
+    }, 500);
+  }
+  function stopLivePolling() { if (pollInterval) { clearInterval(pollInterval); pollInterval = null; } }
+
+  function startBatchPolling() {
+    if (batchPollInterval) clearInterval(batchPollInterval);
+    batchLoaded = false;
+    humanGameActive = false;
+    window.batchAutoFollow = true;
+    batchPollInterval = setInterval(() => {
+      fetch('/api/test_batch_status')
+        .then(r => r.json())
+        .then(data => {
+          if (data.opponent === 'human') {
+            humanGameActive = data.running;
+            if (data.fen && !humanGameActive) {
+              // Update global move list and ply so existing navigation buttons work
+              if (data.moves) {
+                window._LINE_MOVES_SAN = data.moves;
+                batchTotalMoves = data.moves.length;
+                if (window.batchAutoFollow) {
+                  window._CURRENT_PLY = batchTotalMoves;
+                  if (typeof updateBoardFromLine === 'function') {
+                    updateBoardFromLine();
+                  } else {
+                    // fallback
+                    window._CURRENT_STATE = stateFromFEN(data.current_fen);
+                    renderBoard(window._CURRENT_STATE);
+                  }
+                }
+              }
+            }
+            if (data.pgn) {
+              pgnContent.textContent = data.pgn;
+              pgnPanel.style.display = 'block';
+            }
+            const side = data.human_side || 'white';
+            progressDiv.innerHTML = data.running ? ('Playing as ' + side + (data.human_move_pending ? ' (your turn)' : '')) : 'Game finished';
+            startBtn.disabled = data.running;
+            stopBtn.disabled = !data.running;
+            return;
+          }
+          if (data.current_fen && window.batchAutoFollow) { window._CURRENT_STATE = stateFromFEN(data.current_fen); renderBoard(window._CURRENT_STATE); }
+          if (data.current_pgn) { pgnContent.textContent = data.current_pgn; pgnPanel.style.display = 'block'; }
+          if (data.moves && data.moves.length) {
+            window._LINE_MOVES_SAN = data.moves;
+            if (window.batchAutoFollow) window._CURRENT_PLY = data.current_ply || data.moves.length;
+            renderCurrentLineMoves(); updateMoveInfo();
+          } else {
+            window._LINE_MOVES_SAN = []; window._CURRENT_PLY = 0;
+            renderCurrentLineMoves(); updateMoveInfo();
+          }
+          if (data.running) {
+            progressDiv.innerHTML = `Game <strong>${data.games_completed + 1}</strong> of ${data.num_games} – Engine: ${data.engine_color === 'white' ? 'White' : 'Black'}`; if (data.current_pgn) { pgnContent.textContent = data.current_pgn; pgnPanel.style.display = 'block'; }
+            statsDiv.innerHTML = `Engine wins: ${data.wins} | Opponent wins: ${data.losses} | Draws: ${data.draws}`;
+            startBtn.disabled = true; stopBtn.disabled = false;
+        window.batchAutoFollow = true; if (data.current_pgn) { pgnContent.textContent = data.current_pgn; pgnPanel.style.display = 'block'; }
+          } else {
+            if (data.num_games > 0) {
+              progressDiv.innerHTML = `Batch completed: ${data.num_games} games.`;
+              statsDiv.innerHTML = `Engine wins: ${data.wins} | Opponent wins: ${data.losses} | Draws: ${data.draws}`;
+              if (!batchLoaded && data.all_pgns_count > 0) {
+                batchLoaded = true;
+                fetch('/api/test_batch_games')
+                  .then(r => r.json())
+                  .then(res => { if (res.pgn) { rawPgn.value = res.pgn; if (typeof parseAndBuild === 'function') parseAndBuild(res.pgn); } });
+              }
+            } else { progressDiv.innerHTML = ''; statsDiv.innerHTML = ''; }
+            if (data.current_pgn) { pgnContent.textContent = data.current_pgn; pgnPanel.style.display = 'block'; } startBtn.disabled = false; stopBtn.disabled = true;
+          if (window.sseSource) { window.sseSource.close(); window.sseSource = null; }
+          }
+        });
+    }, 500);
+  }
+  function stopBatchPolling() {
+    if (batchPollInterval) { clearInterval(batchPollInterval); batchPollInterval = null; }
+    humanGameActive = false;
+  }
+
+  function setMode(mode) {
+    pollMode = mode; debugMsg('SETMODE: ' + mode); console.log('setMode called with:', mode);
+    toggleBtn.textContent = 'Mode: ' + (mode === 'live' ? 'Live' : 'Test');
+    if (mode === 'live') {
+      pgnPanel.style.display = 'none'; batchPanel.style.display = 'none';
+      stopBatchPolling(); startLivePolling();
+    } else {
+      pgnPanel.style.display = 'block'; batchPanel.style.display = 'block';
+      stopLivePolling(); startBatchPolling();
+    }
+  }
+
+  toggleBtn.addEventListener('click', () => { debugMsg('CLICK: pollMode=' + pollMode); console.log('Mode button clicked, current pollMode:', pollMode); setMode(pollMode === 'live' ? 'test' : 'live'); });
+
+  startBtn.addEventListener('click', () => {
+    const opponent = opponentSelect.value;
+    const numGames = opponent === 'human' ? 1 : (parseInt(numGamesInput.value) || 10);
+    const depth = parseInt(depthInput.value) || 4;
+    const humanColor = humanBlackCheckbox && humanBlackCheckbox.checked ? 'black' : 'white';
+    const body = {num_games: numGames, depth: depth, opponent: opponent};
+    if (opponent === 'human') body.human_color = humanColor;
+    // ----- Live Game Mode (1 game, Live toggle) -----
+    if (pollMode === "live" && numGames === 1) {
+      const opponent = opponentSelect.value;
+      let white = "engine", black = "engine";
+      if (opponent === "random") black = "random";
+      else if (opponent === "human") black = "human";
+      else if (opponent === "self") { white = "engine"; black = "engine"; }
+      fetch("/api/start_live_game", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ white, black })
+      }).then(r => r.json()).then(data => {
+        if (data.status === "started") {
+          console.log("Live game started");
+          // The existing polling (which fetches /api/current_fen) will update the board.
+        }
+      });
+      return;
+    }
+    // Use SSE for live single-game updates
+    if (pollMode === "test" && numGames === 1) {
+      if (window.sseSource) window.sseSource.close();
+      window.sseSource = new EventSource("/api/stream_game");
+      window.sseSource.onmessage = function(event) {
+        const fen = event.data;
+        if (window.batchAutoFollow) {
+          window._CURRENT_STATE = stateFromFEN(fen);
+          renderBoard(window._CURRENT_STATE);
+        }
+      };
+    }
+    fetch('/api/start_test_batch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    }).then(r => r.json()).then(data => { if (data.error) alert(data.error); });
+  });
+
+  stopBtn.addEventListener('click', () => {
+    fetch('/api/stop_test_batch').then(r => r.json()).then(data => {
+      if (data.status === 'stopping') stopBtn.disabled = true;
+    });
+  });
+
+  const loadBtn = document.createElement('button');
+  loadBtn.textContent = 'Load batch games into tree';
+  loadBtn.className = 'secondary';
+  loadBtn.style.marginTop = '8px';
+  loadBtn.addEventListener('click', () => {
+    fetch('/api/test_batch_games').then(r => r.json()).then(res => {
+      if (res.pgn) { rawPgn.value = res.pgn; if (typeof parseAndBuild === 'function') parseAndBuild(res.pgn); }
+    });
+  });
+  batchPanel.appendChild(loadBtn);
+
+  
+// === SF_ANALYSIS_BEGIN ===
+let lastAnalyzedFen = null;
+let analysisRunning = false;
+let sfCache = new Map();
+const SF_CACHE_MAX = 200;
+let sfPanelHidden = false;
+let analysisRequestId = 0;
+let pendingFen = null;
+const SF_SETTINGS_KEY = "sfSettings_v2";
+
+function loadSfSettings() {
+  try {
+    const saved = localStorage.getItem(SF_SETTINGS_KEY);
+    if (saved) {
+      const s = JSON.parse(saved);
+      const elMulti = document.getElementById("sfMultiPV");
+      const elTime = document.getElementById("sfMovetime");
+      const elThreads = document.getElementById("sfThreads");
+      const elHash = document.getElementById("sfHash");
+      if (elMulti) elMulti.value = s.multi_pv || 3;
+      if (elTime) elTime.value = s.movetime || 1500;
+      if (elThreads) elThreads.value = s.threads || 2;
+      if (elHash) elHash.value = s.hash_mb || 256;
+    }
+  } catch(e) {}
+}
+
+function saveSfSettings() {
+  try {
+    const s = {
+      multi_pv: parseInt(document.getElementById("sfMultiPV")?.value) || 3,
+      movetime: parseInt(document.getElementById("sfMovetime")?.value) || 1500,
+      threads: parseInt(document.getElementById("sfThreads")?.value) || 2,
+      hash_mb: parseInt(document.getElementById("sfHash")?.value) || 256
+    };
+    localStorage.setItem(SF_SETTINGS_KEY, JSON.stringify(s));
+  } catch(e) {}
+}
+
+function getSfSettings() {
+  return {
+    multi_pv: parseInt(document.getElementById("sfMultiPV")?.value) || 3,
+    movetime: parseInt(document.getElementById("sfMovetime")?.value) || 1500,
+    threads: parseInt(document.getElementById("sfThreads")?.value) || 2,
+    hash_mb: parseInt(document.getElementById("sfHash")?.value) || 256
+  };
+}
+
+function _doAnalysis(fen) {
+  const settings = getSfSettings();
+  const cacheKey = `${fen}|${settings.multi_pv}|${settings.movetime}|${settings.threads}|${settings.hash_mb}`;
+  if (sfCache.has(cacheKey)) {
+    displaySfLines(sfCache.get(cacheKey));
+    lastAnalyzedFen = fen;
+    return;
+  }
+  analysisRunning = true;
+  const myId = ++analysisRequestId;
+  fetch("/api/analyze_sf", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(Object.assign({fen: fen}, settings))
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (myId !== analysisRequestId) return;
+    if (data.error) { console.warn("Stockfish:", data.error); return; }
+    const lines = data.lines || [];
+    if (sfCache.size >= SF_CACHE_MAX) {
+      const oldest = sfCache.keys().next().value;
+      sfCache.delete(oldest);
+    }
+    sfCache.set(cacheKey, lines);
+    displaySfLines(lines);
+    lastAnalyzedFen = fen;
+  })
+  .catch(() => {})
+  .finally(() => {
+    analysisRunning = false;
+    if (pendingFen) {
+      const next = pendingFen;
+      pendingFen = null;
+      runUnifiedAnalysis(next);
+    }
+  });
+}
+
+function uciToSan(fen, uciStr) {
+  const moves = uciStr.split(/\s+/);
+  const state = stateFromFEN(fen);
+  let result = [];
+  for (const uci of moves) {
+    const m = sanToMove(state, uci);   // assumes board.js has sanToMove
+    if (!m) { result.push(uci); continue; }
+    const san = moveToSAN(state, m);
+    result.push(san);
+    state = applyMoveToState(state, m);
+  }
+  return result.join(' ');
+}
+
+function displaySfLines(lines) {
+  const container = document.getElementById("sfLines");
+  const section = document.getElementById("sfAnalysisPanel");
+  if (!container || !section) return;
+  container.innerHTML = "";
+  const fen = window._CURRENT_STATE ? stateToFEN(window._CURRENT_STATE) : 'startpos';
+  lines.forEach(line => {
+    const div = document.createElement("div");
+    div.style.marginBottom = "4px";
+    // PV number
+    const pvSpan = document.createElement("span");
+    pvSpan.textContent = `${line.multipv}. `;
+    pvSpan.style.color = "#888";
+    div.appendChild(pvSpan);
+    // Score with colour
+    const scoreSpan = document.createElement("span");
+    const score = line.score;
+    if (score.startsWith("+M") || (score.startsWith("+")) ) {
+      scoreSpan.style.color = "#4fc3f7";   // white advantage
+    } else if (score.startsWith("-M") || score.startsWith("-")) {
+      scoreSpan.style.color = "#ef5350";   // black advantage
+    } else {
+      scoreSpan.style.color = "#ccc";
+    }
+    scoreSpan.textContent = score + "  ";
+    div.appendChild(scoreSpan);
+    // SAN moves
+    const sanSpan = document.createElement("span");
+    const san = uciToSan(fen, line.uci_pv);
+    sanSpan.textContent = san;
+    sanSpan.style.color = "#d0d0d0";
+    div.appendChild(sanSpan);
+    container.appendChild(div);
+  });
+  if (sfPanelHidden) return;
+  section.style.display = "block";
+}
+
+function reanalyzeCurrentPosition() {
+  sfCache.clear();
+  lastAnalyzedFen = null;
+  const currentFen = window._CURRENT_STATE ? stateToFEN(window._CURRENT_STATE) : null;
+  if (currentFen) runUnifiedAnalysis(currentFen);
+}
+
+function copySfAnalysis() {
+  const linesDiv = document.getElementById("sfLines");
+  if (!linesDiv) return;
+  const rawText = linesDiv.innerText;
+  const header = "Stockfish Multi‑PV\n";
+  const text = header + rawText;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById("sfCopyBtn");
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+    }).catch(() => prompt("Copy manually:", text));
+  } else {
+    prompt("Copy manually:", text);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  loadSfSettings();
+  try { runUnifiedAnalysis('startpos'); } catch(e) { console.warn('Auto-analysis failed:', e); }
+
+  ['sfMultiPV','sfMovetime','sfThreads','sfHash'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', saveSfSettings);
+  });
+
+});
+// === SF_ANALYSIS_END ===
+
+
+// ========== UNIFIED ANALYSIS (My Engine + Stockfish) ==========
+let analysisPanelHidden = false;
+
+setMode('live');
+
+// ---- Auto-follow toggle via navigation buttons ----
+document.addEventListener('DOMContentLoaded', function() {
+    function afterNav() {
+        if (batchTotalMoves > 0) {
+            // If user manually navigated to a move before the latest, pause auto-follow
+            if (window._CURRENT_PLY < batchTotalMoves) {
+                window.batchAutoFollow = false;
+            } else {
+                // If they're at the latest move, resume auto-follow
+                window.batchAutoFollow = true;
+            }
+        }
+    }
+    // Hook into the buttons after they've been defined
+    const firstBtn = document.getElementById('firstBtn');
+    const prevBtn  = document.getElementById('prevBtn');
+    const nextBtn  = document.getElementById('nextBtn');
+    const lastBtn  = document.getElementById('lastBtn');
+
+    if (firstBtn) firstBtn.addEventListener('click', afterNav);
+    if (prevBtn)  prevBtn.addEventListener('click', afterNav);
+    if (nextBtn)  nextBtn.addEventListener('click', afterNav);
+    if (lastBtn)  lastBtn.addEventListener('click', afterNav);
+});
+
+})();

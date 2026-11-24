@@ -1,0 +1,43 @@
+# ARCHITECTURE
+
+
+Browser frontend → Flask API → SQLite/workers/engine.
+
+Termux is the runtime/development environment. The frontend is the normal control plane.
+
+## Identity Layers
+1. Historical game record: games.white / games.black
+2. Source account: games.source / games.source_username
+3. Canonical person: canonical_players / player_aliases
+
+Historical names are not overwritten.
+
+
+---
+
+## Project Workspace Separation — 2026-08-23
+
+The project now distinguishes between the active workspace and historical material.
+
+- Active workspace: `~/chess_ai/`
+- Historical archive: `~/chess_ai_historical_2026-08-23/`
+
+The historical archive contains rollback snapshots, obsolete implementations,
+experimental/debug files, generated diagnostics, and previous model/database versions.
+
+Historical files are moved, not deleted, so rollback/reference material remains
+available outside the active runtime workspace.
+
+The active workspace retains:
+
+- production source
+- current frontend
+- current documentation
+- evaluation modules
+- supported tests/scripts
+- production database
+- active models
+- opening-tree/runtime artifacts
+- supported training/import assets
+
+Historical archive contents must not be treated as active runtime dependencies.

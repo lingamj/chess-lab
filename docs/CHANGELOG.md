@@ -1,0 +1,159 @@
+# Changelog
+**Project:** Chess AI · **Updated:** 2026-09-11
+
+## 2026-09-19 — Search-return caller migration: verified complete
+
+- Confirmed 15 live `SearchEngine.search(...)` call sites outside `search.py`.
+- All 15 consume the four-value return `(move, score, depth, nodes)`.
+- The prior "four callers still use three-value" claim was stale; it has
+  been corrected across the doc set.
+
+## Phase-0 Fixes Applied (2026-08-09)
+- B-020 – board.py repetition count restored in undo_move
+- B-021 – web_control.py inverted checkmate result fixed
+- B-022 – Model path unified to chess_nn.pkl
+- B-023 – Engine lock added for shared analysis searches
+- B-024 – SSE queue bounded
+- B-025 – batch.js human polling uses current_fen
+- B-026 – Aspiration timeout fallback retains the last valid score
+- B-027 – stop_event properly initialized and cleared before UCI search
+- B-028 – themed data unpacking fixed
+- B-029 – MCTS selection sign corrected
+- B-030 – nn.train() accepts integer or one-hot policy targets
+- B-031 – fen_queue bounded
+- B-032 – go infinite handled
+- B-033 – Stockfish analysis error handling corrected
+- B-034 – background game-thread exception handlers added
+- B-035 – search.py missing threading import fixed during runtime verification
+
+Earlier fixes B-001 through B-019 were applied before this Phase-0 verification cycle.
+See `BUG_TRACKER.md` for the consolidated defect record.
+
+## 2026-08-23 — Analytics, Provenance, Canonical Identity
+
+- Added GET /api/stats/dashboard
+- Added GET /api/provenance/audit
+- Added controlled POST /api/provenance/normalize-source-username
+- Migrated schema 4 → 5
+- Added canonical_players + player_aliases
+- Normalized games.source_username for 14,916 games
+- Exposed canonical identity to analytics/frontend
+
+## 2026-08-23 — Workspace Separation
+
+- Documented active workspace vs historical archive separation.
+- Historical rollback/experimental material is moved, not deleted.
+- Active runtime keeps current source, docs, frontend, DB, model, tree, and supported training assets.
+
+## 2026-09-11 — Patch A Search Provenance
+
+- Completed Patch A in `search.py` through the validated A–J changes.
+- Added `SearchResult` with explicit score, bound, validity, source type, and source depth.
+- Added accepted-root authority fields to keep returned move and score tied to one accepted authoritative iteration.
+- Added TT provenance/version validation and replacement rules.
+- Added source-depth coverage handling for PVS/LMR results.
+- Restricted exact TT eligibility so quiescence results are not treated as authoritative exact search results.
+- Made PV extraction current-version, valid, exact-entry, and legal-move aware.
+- Preserved scalar compatibility wrappers for `_pvs()` and `_quiescence()`.
+- Layer 1 infrastructure validation passed.
+- Real-NN preflight passed.
+- Real-NN direct `SearchEngine` validation passed.
+- Targeted Patch-A contract tests passed.
+- Production `search()` callers were verified to be compatible with the four-value return contract.
+- The protected Patch-A rollback backup remains intact.
+
+## 2026-09-11 — KQK Root-Provenance Regression
+
+- Re-ran the historical KQK regression position:
+  `kq6/8/8/8/8/8/8/K7 b - - 0 1`
+- Confirmed that the returned move and score remain paired with the same accepted root iteration at depths 1–4.
+- Confirmed the depth-5/6 searches correctly retain the last accepted depth-4 result when no deeper iteration is accepted.
+- The historical stale root-move / score-provenance failure is not reproduced on the patched live engine.
+
+## 2026-09-11 — Evaluator Contract Investigation
+
+- KQK depth sweep shows a strong depth-parity score anomaly:
+  odd accepted depths produce approximately +1160/+1178 while even accepted depths produce -0.0.
+- Direct leaf tracing shows `combined_eval()` is White-perspective in the tested KQK positions.
+- The NN value head does not show a coherent material/perspective signal on the four KQK probes and therefore requires a wider validation set before drawing a broader conclusion.
+- The evaluator perspective/score contract remains open.
+- No evaluator or search implementation change has been applied from this investigation yet.
+
+## Known Non-Production Compatibility Issues (as of 2026-09-11 — superseded 2026-09-19)
+
+The following callers still expect the old three-value `search()` return and require attention before those scripts are run:
+
+- `test_vs_random_web.py:57`
+- `generate_themed_data.py:86`
+- `update_all.sh:1494`
+- `update_all.sh:2587`
+
+These are outside the verified production integration path.
+
+## Current Documentation Status
+
+The project documentation is being reconciled against the current live implementation incrementally.
+Historical/archive documentation must not be treated as the current runtime contract.
+
+---
+
+## 2026-09-12 — B-022 status correction
+
+An earlier entry in this changelog records:
+
+    - B-022 – Model path unified to chess_nn.pkl
+
+That entry remains the historical record of what was recorded at that
+time. The reviewed evidence does not establish whether the change was
+actually applied to the live source. The current live source
+contradicts the current status.
+
+### Live evidence
+
+`web_control.py:22` sets:
+
+    MODEL_PATH = os.path.join(CHESS_DIR, "distilled_nn.pkl")
+
+All other model-load sites identified in the current tree use
+`chess_nn.pkl` or `chess_nn_master.pkl`.
+
+### Status
+
+B-022 is **contradicted by live source**, not currently resolved.
+
+Whether the fix was applied and later reverted in `web_control.py`, or
+was recorded without an applied change, is **not established**.
+
+The item remains **OPEN** pending determination of the intended
+canonical artifact and a validated live-source correction.
+
+### Historical record preserved
+
+Earlier entries in this changelog are not edited. They remain the
+historical record for their dates.
+
+### Cross-references
+
+- `docs/AUDIT_STATUS.md` — "2026-09-12 — B-022 status correction".
+- `docs/BUG_TRACKER.md` — "2026-09-12 — B-022 status correction".
+- `docs/TRAINING_GUIDE.md` — documents the model-artifact split.
+- `docs/DEVELOPER_GUIDE.md` — "Current known contradiction".
+- `docs/WORKFLOW.md` — safety implication for `train_auto.sh`.
+
+
+---
+
+## 2026-09-27 — Line-reference correction
+
+The 2026-09-12 B-022 status correction cites `web_control.py:22`. The
+current live line is 25. The underlying claim is correct; only the
+citation is stale.
+
+The current live source loads `distilled_nn.pkl` from `web_control.py`
+and `chess_nn.pkl` from `uci_engine.py`. The canonical-artifact decision
+remains **OPEN** under B-022.
+
+### Cross-references
+
+- `docs/AUDIT_STATUS.md` — current verified state.
+- `docs/TRAINING_GUIDE.md` — model-artifact split.

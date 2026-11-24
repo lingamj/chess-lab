@@ -1,0 +1,109 @@
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "1"]
+[White "Engine"]
+[Black "Random"]
+[Result "*"]
+[FEN "7K/P1R1pkP1/2PQ4/8/5r2/8/8/8 w - - 13 101"]
+
+1. d2d4 f7f5 2. c2c4 g8h6 3. b1c3 d7d5 4. g1f3 b7b5 5. b2b3 d8d7 6. e2e3 d7d8 7. f1d3 d8d7 8. e1g1 d7e6 9. e3e4 e8d7 10. e4d5 g7g5 11. h2h3 e6e3 12. c3b5 e3d3 13. c1g5 d3f3 14. b3b4 h6f7 15. a1b1 d7d8 16. g2g3 f3d3 17. f1e1 c8e6 18. a2a4 b8d7 19. f2f4 d3e3 20. g1h2 a8b8 21. d1d3 d7c5 22. a4a5 c5a6 23. h3h4 e3f4 24. h2h3 a6b4 25. d5e6 f4d6 26. c4c5 b4d5 27. e1e4 h8g8 28. h4h5 g8g6 29. h5g6 h7h5 30. h3h4 f8g7 31. b1b2 d6c5 32. b2b3 b8c8 33. b5c3 c5a3 34. b3b4 c8b8 35. b4b5 f7d6 36. h4h5 d5c3 37. g3g4 c3e4 38. d4d5 a3a2 39. a5a6 g7h6 40. g4f5 a2a1 41. f5f6 d8c8 42. h5h6 a1f1 43. h6h7 f1h1 44. g5h4 c7c6 45. d3e3 h1h4 46. e3h6 e4d2 47. h7g7 h4f6 48. g7g8 f6f3 49. h6h7 d2b1 50. b5b6 f3g2 51. b6b7 c8d8 52. d5c6 g2b2 53. b7c7 d6f7 54. c7a7 f7d6 55. a7b7 b2h8 56. h7h8 b8c8 57. a6a7 d6c4 58. b7c7 c4b2 59. h8h7 b2d3 60. g8h8 d8e8 61. h7f7 e8d8 62. f7f6 b1d2 63. f6f7 d3c1 64. f7f6 c1e2 65. f6f7 e2d4 66. f7f6 d4f5 67. f6g7 d2c4 68. g7e5 c8b8 69. e5d4 d8e8 70. h8h7 b8b5 71. d4d5 b5b3 72. d5c4 b3b8 73. h7h8 f5d6 74. c4d3 b8b1 75. d3c4 b1a1 76. c4a4 a1c1 77. a4a5 c1h1 78. h8g8 d6e4 79. a5a6 h1e1 80. g8h8 e4g5 81. h8g8 g5h3 82. a6d3 h3g5 83. d3c4 e1d1 84. g8h8 e8f8 85. c4d3 g5f3 86. d3d2 f3e5 87. d2g5 d1d6 88. g5f4 e5f7 89. h8h7 d6e6 90. f4e3 e6d6 91. e3e6 d6d2 92. e6d6 f7e5 93. g6g7 f8f7 94. d6e5 d2c2 95. e5d4 f7e8 96. d4d5 c2a2 97. d5c4 a2b2 98. c4c5 e8f7 99. c5d6 b2f2 100. h7h8 f2f4 *
+
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "2"]
+[White "Random"]
+[Black "Engine"]
+[Result "*"]
+[FEN "3k4/3r4/8/4Kp2/PP1Q3r/3p1R1q/5R2/4B3 w - - 11 101"]
+
+1. f2f3 e7e5 2. b1c3 b8c6 3. e1f2 g8f6 4. f3f4 d7d5 5. f4f5 f8e7 6. c3e4 e8g8 7. e4f6 e7f6 8. f2e1 c6d4 9. c2c3 b7b5 10. g2g4 e5e4 11. h2h3 h7h6 12. e1f2 d8d6 13. a1b1 f8e8 14. f1g2 a7a5 15. d1c2 b5b4 16. f2e1 g8f8 17. e1f1 b4c3 18. a2a4 c7c6 19. g1f3 c8b7 20. h1h2 a8d8 21. f3e5 f6e5 22. g2h1 e4e3 23. g4g5 f8e7 24. b1a1 e8f8 25. h1f3 f8e8 26. d2e3 e8f8 27. f5f6 g7f6 28. c2f5 f8e8 29. f3g2 e8f8 30. f5d3 f8g8 31. g2h1 g8f8 32. d3c2 e7d7 33. h2f2 b7c8 34. c2d2 f8e8 35. d2d1 c8b7 36. f1g1 e8f8 37. g1g2 f8e8 38. b2b3 e8f8 39. d1e1 f8e8 40. g5h6 c3c2 41. a1a3 b7c8 42. e1d1 c8b7 43. d1f1 b7c8 44. e3d4 e5d4 45. c1b2 e8f8 46. g2f3 f8e8 47. f3g4 e8f8 48. e2e4 c2c1q 49. f1e1 d6g3 50. g4f5 d4c5 51. a3a1 d5d4 52. f2g2 d4d3 53. g2e2 c8b7 54. e4e5 f6e5 55. h6h7 f7f6 56. a1a3 d8b8 57. h1e4 f8g8 58. e1c3 g8g7 59. e2h2 g7h7 60. b3b4 h7h8 61. h2d2 b8a8 62. a3a2 d7d8 63. c3c2 h8h7 64. c2d1 c5e7 65. b2a1 a8c8 66. e4d5 c6d5 67. d2g2 h7h6 68. a2d2 c1c6 69. g2g1 d5d4 70. d1b1 c6d5 71. b1c1 g3h3 72. g1g4 d5e6 73. f5e6 h6h5 74. d2h2 b7a6 75. h2b2 a6b5 76. c1c3 b5c4 77. c3c4 h5h4 78. c4c2 f6f5 79. c2d3 c8c7 80. d3a6 c7d7 81. a6b5 h4h8 82. g4g2 h8h7 83. g2g3 h7h5 84. b2f2 d4d3 85. b5d5 e7d6 86. f2e2 d6e7 87. d5a5 d8e8 88. a1c3 e8f8 89. e6e5 e7d8 90. e2b2 f8e7 91. a5c5 e7f7 92. c5c4 f7f8 93. c4c5 f8e8 94. b2f2 d8c7 95. c5c7 e8f8 96. c7c8 f8e7 97. c8c4 h5h4 98. c4d4 e7d8 99. c3e1 h4h5 100. g3f3 h5h4 *
+
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "3"]
+[White "Engine"]
+[Black "Random"]
+[Result "*"]
+[FEN "N7/P1N3Q1/r2kP3/8/1K3p1r/7B/1b6/4N3 w - - 6 101"]
+
+1. d2d4 f7f6 2. c2c4 h7h5 3. b1c3 b7b5 4. e2e4 c8b7 5. g1f3 g7g5 6. b2b3 f6f5 7. e4e5 b7d5 8. g2g3 d8c8 9. f1g2 d5c4 10. a2a4 d7d6 11. c1g5 a7a5 12. d4d5 c4d5 13. h2h3 h8h7 14. g5f6 h5h4 15. d1d2 h4g3 16. d2d4 e8d8 17. c3b5 h7g7 18. b3b4 g8f6 19. d4d5 f6e4 20. f3d4 e4f6 21. f2f4 f6e8 22. d5e6 b8d7 23. h1g1 g7g5 24. a1c1 d6d5 25. e6e7 d8e7 26. c1b1 g5h5 27. d4c2 h5h6 28. b4a5 c8b7 29. e1e2 h6d6 30. e2f3 b7a6 31. e5e6 d5d4 32. h3h4 d6b6 33. b5c7 e7d6 34. g2h3 a6c4 35. g1g2 a8d8 36. g2g3 c4e2 37. f3e2 d7c5 38. a5a6 d6e7 39. a4a5 c5d7 40. e2d3 e8d6 41. a6a7 d8b8 42. b1b2 d7c5 43. d3d4 d6c4 44. g3g2 c4d6 45. g2g3 b8a8 46. d4d5 c5d3 47. g3f3 f8h6 48. f3g3 b6b7 49. g3f3 h6g7 50. f3g3 g7b2 51. a5a6 b2a1 52. g3g2 a1g7 53. g2g3 g7h8 54. g3f3 h8e5 55. f3g3 e5c3 56. g3g2 b7b6 57. g2g3 d3e1 58. g3g2 c3b4 59. g2g3 e7f8 60. g3f3 f8g8 61. f3f1 e1d3 62. f1e1 a8e8 63. e1e4 e8a8 64. e4e5 b6c6 65. h4h5 g8f8 66. e5e4 c6c5 67. d5d6 d3f2 68. e4e5 c5b5 69. d6d7 a8b8 70. h5h6 b5c5 71. c2e1 c5c2 72. h6h7 b8b6 73. a7a8n b6d6 74. d7c8 c2c6 75. h7h8q f8e7 76. a6a7 c6c3 77. c8b7 c3c4 78. h8g8 d6d3 79. b7a6 c4e4 80. g8h8 b4d6 81. h8c8 d6a3 82. c8b7 d3c3 83. b7b6 c3c1 84. b6b7 e4c4 85. b7f3 f2g4 86. f3g4 e7d6 87. g4g5 c4f4 88. g5g6 c1c3 89. g6g7 c3d3 90. a6b7 f4g4 91. b7a6 f5f4 92. a6b7 d3f3 93. b7a6 g4g3 94. a6b7 a3b2 95. b7a6 f3a3 96. a6b5 g3g4 97. b5c4 b2e5 98. c4b4 g4h4 99. b4c4 e5b2 100. c4b4 a3a6 *
+
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "4"]
+[White "Random"]
+[Black "Engine"]
+[Result "*"]
+[FEN "8/7k/P7/4q2P/4PRp1/8/1q6/4BK2 w - - 10 101"]
+
+1. g1f3 e7e5 2. h2h4 b8c6 3. f3e5 g8f6 4. c2c3 f8e7 5. c3c4 d7d5 6. d2d3 e8g8 7. h1h3 d5c4 8. e2e3 d8d5 9. b2b3 c6a5 10. h3h1 b7b5 11. a2a3 f8e8 12. c1b2 b5b4 13. d1e2 a7a6 14. f2f3 d5d4 15. b2c1 c7c5 16. e5d7 c8b7 17. e3e4 h7h6 18. d7f6 e7f6 19. e2e3 g8h7 20. h4h5 e8f8 21. h1h2 f8e8 22. e1e2 a8d8 23. e2e1 d8d5 24. g2g4 c4c3 25. a1a2 a5c4 26. f3f4 c4e3 27. h2h4 a6a5 28. c1e3 e8d8 29. a3a4 d4d3 30. a2f2 b7a6 31. b1a3 f6e5 32. f2h2 f7f6 33. h2e2 d5d4 34. f4e5 f6e5 35. e3c1 d8d5 36. c1d2 g7g5 37. a3b5 h7h8 38. b5c7 h8g8 39. c7e6 g8h7 40. d2g5 a6b7 41. e6d4 d3g3 42. e2f2 b7a6 43. f1b5 d5d4 44. h4h1 a6b5 45. g5d2 b5c4 46. h1g1 g3f4 47. f2f4 d4d3 48. f4f3 c3c2 49. e1e2 c2c1q 50. g1g3 c1c2 51. g3g1 h7h8 52. g1a1 h8h7 53. f3g3 c2a2 54. e2f2 a2b3 55. a1a2 b3b2 56. g3e3 b4b3 57. e3e1 b2a3 58. e1f1 b3b2 59. a2b2 a3a2 60. b2c2 a2b3 61. f1e1 b3b2 62. c2c1 b2a3 63. c1c4 a3a2 64. c4c2 a2b3 65. f2g1 b3b2 66. c2c4 b2a3 67. c4d4 a3a2 68. e1e3 a2b3 69. d2a5 b3b2 70. e3d3 e5d4 71. d3g3 d4d3 72. a5c7 c5c4 73. c7e5 c4c3 74. e5f4 c3c2 75. f4b8 b2a3 76. b8c7 c2c1q 77. g1h2 c1c6 78. c7d6 c6d5 79. d6c5 d5e6 80. h2g2 e6f5 81. c5a7 f5f6 82. g4g5 f6e5 83. g2g1 e5d6 84. g3d3 d6d5 85. g1f2 a3a2 86. f2g1 a2b3 87. g1f1 d5e6 88. d3d5 e6f5 89. f1g1 f5f6 90. d5b5 f6e5 91. a4a5 b3b2 92. a7b8 e5d6 93. b8c7 d6d5 94. a5a6 h6g5 95. b5b3 g5g4 96. c7a5 d5e6 97. g1f1 e6f5 98. b3f3 f5f7 99. a5e1 f7f6 100. f3f4 f6e5 *
+
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "5"]
+[White "Engine"]
+[Black "Random"]
+[Result "*"]
+[FEN "8/1kP2P2/8/4Pb1p/5K1P/2rp4/8/8 w - - 7 101"]
+
+1. d2d4 g7g5 2. c2c4 b8a6 3. b1c3 f7f6 4. g2g3 f8h6 5. f1g2 e7e6 6. a2a4 a8b8 7. b2b4 g5g4 8. e2e3 h6e3 9. a1a2 e3c1 10. b4b5 c1d2 11. d1d2 b8a8 12. d2e2 g8h6 13. f2f4 e6e5 14. g1f3 e8e7 15. f3e5 e7e6 16. c4c5 d7d5 17. e1g1 h8e8 18. f1e1 f6f5 19. e2f3 e8h8 20. g2h1 g4f3 21. g1f2 d8d7 22. e1e4 d7c6 23. f2e3 h6g8 24. a4a5 g8h6 25. e3f3 a6b4 26. a2a4 b4a2 27. c3d5 h6g8 28. h2h3 c6e8 29. e5g6 e6f7 30. g3g4 g8f6 31. h3h4 e8e7 32. g4g5 e7f8 33. g5f6 h7h5 34. f3g3 f8g8 35. g3f3 g8h7 36. f3g3 h7g8 37. g3f3 g8g6 38. f3e2 c8e6 39. e2f3 g6g3 40. f3g3 a8b8 41. g3f3 h8h6 42. a5a6 e6c8 43. a4a5 f5e4 44. f3e2 a2c1 45. e2f1 b7a6 46. a5a6 h6g6 47. a6a7 c8b7 48. b5b6 b8a8 49. f1e1 a8e8 50. e1d1 e4e3 51. d1c1 b7a8 52. b6b7 e8d8 53. c1d1 g6g1 54. d1e2 f7g8 55. e2f3 d8f8 56. f3e2 g1e1 57. e2f3 f8f7 58. f3g3 f7h7 59. g3f3 e1a1 60. f3g3 g8f8 61. g3f3 h7e7 62. f3g3 a1a3 63. g3f3 f8f7 64. f3g3 a3a6 65. g3f3 a6e6 66. f3g3 c7c6 67. b7b8q e6e4 68. g3f3 c6d5 69. f3e2 e4d4 70. e2f1 d4d2 71. f1g1 d2a2 72. g1f1 f7g6 73. f1g1 a2d2 74. b8e8 e7e8 75. g1f1 g6f5 76. f1g1 e8e5 77. f4e5 f5e6 78. g1f1 d2d4 79. f1g1 d4d1 80. g1g2 d1c1 81. g2g3 c1d1 82. g3f3 d1b1 83. f3f4 b1g1 84. f4e3 g1h1 85. e3f4 h1a1 86. f4e3 d5d4 87. e3f4 a1g1 88. f6f7 g1a1 89. a7a5 a8h1 90. a5a6 a1a6 91. f4g3 d4d3 92. g3h2 a6a3 93. h2h3 h1e4 94. c5c6 e4f5 95. h3h2 e6e7 96. h2g2 e7d8 97. c6c7 d8c8 98. g2g3 c8b7 99. g3f3 a3b3 100. f3f4 b3c3 *
+
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "6"]
+[White "Random"]
+[Black "Engine"]
+[Result "*"]
+[FEN "1r1k4/7p/2p4P/RP6/1P4K1/6br/1RB5/B7 w - - 5 101"]
+
+1. g2g4 e7e5 2. h2h4 b8c6 3. c2c4 d7d5 4. h4h5 g8f6 5. e2e4 c6e7 6. g1f3 c8e6 7. h1g1 c7c6 8. c4c5 a7a6 9. f1a6 f6e4 10. d1e2 a8c8 11. f3e5 b7b5 12. e2e4 b5b4 13. e4d4 d8d7 14. e1f1 f7f5 15. f2f3 g7g5 16. e5d3 d7d8 17. g1h1 e7g6 18. f1g1 f8e7 19. a2a3 g6f4 20. a1a2 e7f6 21. d3e1 d8d7 22. d4e3 d7d8 23. e1d3 d5d4 24. d3f2 e8f8 25. a6d3 f8e8 26. d3f1 d4d3 27. a2a1 d8d7 28. f1e2 d7d8 29. h1h4 f6e5 30. f2h3 d8d7 31. g1f2 d7d8 32. e2d1 f5g4 33. e3d3 g4f3 34. d3f5 g5g4 35. a1a2 e6f5 36. h3f4 f5e4 37. f2g1 e8f8 38. f4h3 f8e7 39. b2b3 e7d7 40. d2d3 h8g8 41. d1e2 g8f8 42. b1c3 f8g8 43. h4g4 g8g7 44. g1f2 g7g8 45. e2f1 g8h8 46. c3a4 d8f6 47. d3e4 e5d4 48. f2g3 d4c5 49. c1b2 f6e5 50. g4f4 h8g8 51. g3h4 g8g7 52. f4f3 c8d8 53. h3g1 e5e4 54. h4h3 e4e3 55. b2a1 c5e7 56. a1e5 e7f6 57. a2g2 g7g8 58. e5b2 g8f8 59. g2e2 f8g8 60. b2d4 g8f8 61. a4b6 d7c7 62. e2a2 f8g8 63. f1b5 f6e5 64. b5a6 g8f8 65. b6c8 c7d7 66. d4c3 f8g8 67. a6d3 e3e2 68. d3b1 g8g7 69. f3e3 g7g8 70. g1e2 g8f8 71. h3g2 f8g8 72. g2f1 g8f8 73. e3f3 f8g8 74. f3f2 g8f8 75. c8e7 f8f3 76. a2d2 d7e6 77. d2d5 e6f7 78. d5a5 f7f8 79. c3a1 f8e7 80. a3b4 e7d7 81. a5a6 f3h3 82. e2g3 e5d6 83. b1d3 d6e7 84. f2b2 d8b8 85. d3f5 d7c7 86. f1e2 c7d6 87. a6a2 e7f6 88. e2f3 d6e7 89. f5c2 e7d7 90. a2a3 f6e5 91. a3a6 d7e6 92. f3g4 e6f7 93. b4b5 f7f6 94. g3e4 f6e7 95. e4d6 e7d7 96. a6a5 e5d6 97. h5h6 d6g3 98. b3b4 d7d8 99. a5a3 b8a8 100. a3a5 a8b8 *
+
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "7"]
+[White "Engine"]
+[Black "Random"]
+[Result "*"]
+[FEN "br2kr2/7R/8/p2p4/2p5/6p1/2K5/8 w - - 0 101"]
+
+1. d2d4 g8f6 2. c2c4 f6g8 3. b1c3 b8a6 4. e2e4 a6b4 5. g1f3 g7g5 6. e4e5 b4a2 7. b2b3 g8h6 8. c1e3 h6f5 9. f1d3 f5d6 10. e1g1 f8h6 11. h2h3 f7f6 12. a1c1 d6f5 13. c4c5 f5e3 14. c3b5 e7e6 15. f3d2 b7b6 16. f2f4 f6e5 17. f4e5 a7a5 18. g2g3 e3g2 19. g3g4 a8a6 20. g1h1 a2c1 21. h1g1 g2e3 22. b5c3 b6c5 23. b3b4 c5c4 24. b4b5 d7d6 25. g1h2 e3f5 26. d1f3 a6a7 27. f1h1 c1d3 28. h1g1 f5d4 29. g1g2 d3e5 30. g2g3 d4b5 31. c3b5 e5d7 32. f3f4 e8e7 33. f4e5 a7a6 34. e5e6 e7f8 35. h2g2 a6c6 36. g2h2 c8a6 37. d2b3 d7e5 38. h2g2 c6c5 39. g2h2 d6d5 40. h2g2 h8g8 41. g2h2 f8g7 42. h2g2 d8a8 43. b5c3 a8e8 44. g2h1 g7f8 45. h1g1 e8a4 46. g1h2 a4a2 47. h2g1 a2b3 48. g1h2 a6c8 49. h2g2 c8e6 50. g2h2 e5g4 51. h2g1 f8f7 52. g1g2 c5c6 53. g2f3 f7g6 54. f3e2 b3a4 55. e2f1 g6f7 56. h3h4 g8c8 57. g3h3 f7f8 58. c3b5 a4b5 59. f1g1 b5b6 60. g1g2 b6b5 61. g2g3 f8e7 62. g3f3 e6d7 63. f3e2 c8d8 64. e2f1 c6a6 65. f1e2 d7c6 66. e2f1 h6f8 67. h4h5 c6d7 68. h5h6 f8h6 69. f1e2 b5c6 70. e2f1 d8g8 71. h3h4 e7d8 72. f1e2 g4e5 73. e2f1 c6f6 74. f1e2 f6f1 75. e2f1 e5c6 76. f1e2 c6b4 77. e2f1 g8f8 78. f1e2 f8g8 79. e2f1 a6a7 80. f1e2 d7g4 81. e2f1 b4c2 82. h4h5 c7c5 83. h5h6 g4c8 84. h6h7 g8f8 85. f1e2 f8f6 86. h7h8 f6f8 87. h8h5 c4c3 88. e2d3 a7a6 89. h5h6 a6a8 90. h6h7 d8e8 91. h7h8 c5c4 92. d3c2 c8a6 93. c2d1 a6b7 94. h8h5 a8b8 95. h5h6 f8g8 96. h6h5 c3c2 97. d1c1 g8f8 98. h5h6 b7a8 99. h6h7 g5g4 100. c1c2 g4g3 *
+
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "8"]
+[White "Random"]
+[Black "Engine"]
+[Result "*"]
+[FEN "3b4/5k2/R7/3R1P2/rp6/1n1P3r/3q2B1/5K2 w - - 24 101"]
+
+1. g1f3 e7e5 2. h1g1 b8c6 3. a2a4 g8f6 4. b1c3 d7d6 5. b2b4 f8e7 6. a1a2 a7a6 7. a4a5 g7g5 8. c3e4 e8g8 9. h2h4 h7h6 10. g2g3 c6d4 11. g3g4 c7c6 12. a2a1 c8d7 13. c1b2 b7b5 14. f1h3 d6d5 15. a1a4 h6h5 16. d2d3 f8e8 17. b2a1 e8f8 18. c2c4 a8b8 19. e2e3 g8h8 20. h3f1 f8e8 21. f1e2 e8f8 22. g1h1 f8e8 23. g4h5 g5g4 24. e4c3 e5e4 25. f3g5 d5c4 26. a1b2 e8f8 27. e2g4 d4b3 28. d1c1 b8a8 29. c1d1 f8g8 30. c3e4 a8b8 31. e1e2 b8a8 32. a4a2 g8f8 33. h1f1 h8g8 34. e2f3 d7c8 35. g4d7 g8h8 36. b2a1 c8b7 37. g5h7 f8g8 38. d7c8 a8a7 39. c8f5 d8d5 40. a1d4 c4c3 41. d4f6 g8g7 42. f5g6 h8g8 43. a2a3 d5f5 44. f3e2 e7d8 45. e2e1 c6c5 46. d1g4 g8h8 47. e4d6 h8g8 48. g4h3 g8h8 49. h3f3 h8g8 50. e1d1 g7h7 51. f3h3 g8f8 52. g6f7 h7h8 53. a3a1 c3c2 54. d1c2 d8f6 55. f7g8 f8e7 56. g8e6 e7d8 57. c2d1 h8g8 58. f1e1 g8f8 59. h3g3 f8g8 60. a1a4 g8f8 61. e6d5 f8g8 62. d1e2 g8g7 63. f2f4 g7h7 64. d5e4 f6e5 65. d6c4 e5d6 66. e2f1 f5f7 67. e4h1 f7f6 68. e1b1 f6e5 69. b1c1 b5c4 70. g3h3 c4c3 71. a4a2 c3c2 72. b4b5 d6f8 73. f4f5 e5f4 74. e3f4 c5c4 75. h1b7 c4c3 76. f1g2 a6b5 77. h3g4 b5b4 78. c1g1 c2c1q 79. f5f6 f8e7 80. g2h1 c3c2 81. a2c2 a7a5 82. g4g3 h7h5 83. b7f3 a5a4 84. f4f5 c1d1 85. f3e4 h5h4 86. g3h3 d1d2 87. g1f1 h4h3 88. h1g1 e7f6 89. f1e1 f6e5 90. c2c3 e5d6 91. e1e3 d6e7 92. c3c7 e7f6 93. c7c6 f6e5 94. e4f3 e5d6 95. c6a6 d6e7 96. e3e5 d8e8 97. e5b5 e8f8 98. g1f1 e7d8 99. b5d5 f8e7 100. f3g2 e7f7 *
+
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "9"]
+[White "Engine"]
+[Black "Random"]
+[Result "*"]
+[FEN "4k3/8/1Q4P1/8/5P2/p7/n2r4/5K2 w - - 13 101"]
+
+1. d2d4 a7a6 2. c2c4 a8a7 3. b1c3 f7f6 4. e2e4 f6f5 5. g1f3 d7d5 6. e4d5 g7g6 7. c1f4 b7b6 8. g2g3 e8d7 9. b2b3 f8h6 10. f1g2 c8b7 11. d1c2 d8e8 12. f4e5 b7c6 13. e1g1 c6d5 14. f1e1 c7c6 15. a1c1 h6e3 16. c4d5 e3g5 17. h2h3 g8f6 18. a2a4 g5h4 19. b3b4 e8f8 20. b4b5 e7e6 21. g1h1 f8g8 22. a4a5 g8d8 23. e1g1 d8c8 24. f3e1 f6h5 25. f2f4 h4d8 26. c2d1 b6a5 27. d1d2 c6b5 28. d5d6 h7h6 29. h1h2 d8e7 30. c3b5 c8c2 31. g2h1 e7g5 32. g1g2 c2c7 33. h3h4 h8g8 34. h2h3 g8f8 35. d4d5 c7d8 36. c1c2 d8e7 37. c2c4 h5g7 38. h4h5 d7d8 39. h5g6 g7h5 40. c4e4 a7b7 41. g3g4 f8e8 42. g4f5 b7b5 43. g2g3 h5f6 44. g3g4 f6d7 45. g4g5 h6g5 46. d5e6 d7f6 47. d6d7 f6d7 48. e6d7 b5b1 49. e5d6 b1e1 50. d6e5 e7c5 51. e5d6 e1h1 52. h3g4 e8e4 53. g4g5 b8d7 54. d6e5 h1b1 55. e5d6 b1f1 56. d6e5 f1b1 57. e5d6 e4d4 58. d6e5 c5d6 59. e5d6 a5a4 60. d6e5 b1b8 61. e5d6 b8b7 62. d6e5 a4a3 63. e5d6 d8c8 64. d6e5 c8d8 65. e5d6 b7b4 66. d6e5 d8e7 67. e5d6 e7e8 68. d6e5 e8d8 69. e5d6 d8e8 70. d6e5 e8f8 71. e5d6 d4d6 72. f5f6 d6f6 73. g5h4 b4a4 74. h4g3 f6b6 75. g3f3 f8e7 76. f3e2 b6b4 77. e2d3 d7b8 78. d3e3 b8c6 79. e3d3 e7d7 80. d3e3 b4d4 81. e3f3 d7d8 82. f3e2 c6b4 83. d2c2 d8d7 84. c2d1 d7d8 85. d1g1 d4d1 86. g1g2 d1d7 87. e2f1 b4a2 88. g2g3 d7d4 89. g3f3 d8e8 90. f3c3 d4d8 91. c3c4 d8d7 92. c4a4 e8e7 93. a4a5 d7d4 94. a5a6 d4d1 95. f1g2 d1d8 96. a6a7 e7f8 97. g2f3 d8d6 98. f3e2 d6d5 99. e2f1 f8e8 100. a7b6 d5d2 *
+
+[Event "Test vs Random"]
+[Site "ChessAI"]
+[Date "2026.06.19"]
+[Round "10"]
+[White "Random"]
+[Black "Engine"]
+[Result "*"]
+[FEN "4R3/8/6k1/p1P1p3/P3Pb2/5P1K/1p6/8 w - - 6 101"]
+
+1. e2e4 e7e5 2. d2d3 b8c6 3. d1g4 g8f6 4. g4d7 c8d7 5. e1d1 f8e7 6. b1a3 e8g8 7. g2g3 c6d4 8. f1h3 c7c6 9. g1f3 a7a6 10. c2c4 b7b5 11. c1h6 f8e8 12. a3b1 c6c5 13. f3g5 b5b4 14. h6g7 h7h6 15. d1e1 f6h7 16. g5e6 a6a5 17. e6g5 g8g7 18. h3g2 g7f6 19. g5f7 h6h5 20. a2a3 e8f8 21. h1f1 f8e8 22. f1h1 e8f8 23. a3a4 a8c8 24. f7h6 f6g6 25. g2h3 d8c7 26. h3g4 f8e8 27. b1d2 e7g5 28. g4f5 d7f5 29. h6f5 e8f8 30. f5g7 f8g8 31. d2b3 g8g7 32. g3g4 c7e7 33. a1a3 e7f7 34. b3d4 c5d4 35. a3a2 f7f6 36. a2a1 f6f5 37. g4h5 g6f6 38. h5h6 f5e4 39. d3e4 g5f4 40. e1f1 h7g5 41. a1a2 d4d3 42. c4c5 g7h7 43. h1g1 h7h6 44. b2b3 h6h5 45. c5c6 c8c6 46. g1g2 c6c5 47. a2c2 c5c4 48. c2c3 c4c6 49. c3d3 c6c5 50. d3d1 c5c4 51. d1d3 c4c6 52. f1g1 c6c5 53. h2h4 c5c4 54. d3h3 c4c6 55. h3d3 c6c5 56. g2g3 c5c4 57. f2f3 c4c6 58. d3d1 f6g6 59. g3h3 g6f6 60. g1h1 f6g6 61. h1g1 g6f6 62. g1g2 f6g6 63. d1d2 g6f6 64. d2c2 f6e6 65. h3h1 e6d6 66. h4g5 d6e7 67. c2a2 e7d7 68. h1g1 h5h4 69. a2a3 h4h3 70. a3a1 d7d8 71. g1f1 c6c5 72. a1d1 d8c7 73. d1d3 c5c4 74. d3d7 c7d7 75. f1d1 d7e8 76. d1g1 e8f8 77. b3c4 f8e7 78. c4c5 e7d7 79. g1a1 d7d8 80. g2h3 b4b3 81. a1h1 b3b2 82. h1h2 d8e8 83. h2h1 e8f8 84. h3g4 f8e7 85. h1h5 e7d7 86. h5h1 d7d8 87. h1h3 d8e8 88. h3h6 e8f8 89. h6h5 f8e7 90. g4h4 e7d7 91. h5h8 d7e6 92. h8b8 e6f7 93. b8a8 f7g6 94. a8c8 g6g7 95. h4g4 g7h7 96. g4h3 h7g6 97. c8h8 g6g5 98. h8f8 g5g6 99. f8g8 g6f6 100. g8e8 f6g6 *

@@ -1,0 +1,6 @@
+# NEURAL_NETWORK
+
+
+Neural network training/model work is separate from the completed analytics/provenance phase.
+
+Current production database/schema is not affected by neural-net documentation changes.

@@ -1,0 +1,815 @@
+# ♟️ Chess AI – Self‑Improving Neural Engine
+
+**Version 1.0** – A complete Python chess engine with a dual‑head neural network (value + policy), self‑play training, PGN parsing, capture‑tactical learning, web interface, and a fully automated continuous‑improvement pipeline.  
+Runs on Android/Termux and desktop Linux.
+
+---
+
+## Current Production Checkpoint (2026-08-23)
+
+- schema_version: 5
+- games: 14,916
+- game_moves: 1,031,269
+- import_batches: 67
+- import_records: 23,496
+- sync_jobs: 2
+- canonical_players: 1
+- player_aliases: 2
+- source_username NULL: 0
+- sync_state tree_dirty: 0 for both sources
+
+Canonical identity:
+- `jothi`
+  - `jothilingam` → lichess
+  - `jothi_lingam` → chesscom
+
+---
+
+## Table of Contents
+
+1. [Introduction](#1-introduction)
+2. [Architecture Overview](#2-architecture-overview)
+3. [Folder Structure](#3-folder-structure)
+4. [File‑by‑File Explanation](#4-file-by-file-explanation)
+    * [board.py](#boardpy)
+    * [move_helpers.py](#move_helperspy)
+    * [nn.py](#nnpy)
+    * [search.py](#searchpy)
+    * [uci_engine.py](#uci_enginepy)
+    * [web_control.py](#web_controlpy)
+    * [pgn_learner.py](#pgn_learnerpy)
+    * [train.py](#trainpy)
+    * [benchmark.py](#benchmarkpy)
+    * [run_tests.sh](#run_testssh)
+5. [Chess Board Representation](#5-chess-board-representation)
+6. [Move Generation & Indexing](#6-move-generation--indexing)
+## 7 [Neural Network Architecture](#7-neural-network-architecture)
+## 8 [Dataset System & Format](#8-dataset-system--format)
+## 9. [Capture Training](#9-capture-training)
+## 10. [Training Pipeline](#10-training-pipeline)
+## 11. [Search Algorithm](#11-search-algorithm)
+## 12. [Move Ordering & Transposition Table](#12-move-ordering--transposition-table)
+## 13. [Web Interface & UCI Engine](#13-web-interface--uci-engine)
+## 14. [Continuous Learning Loop](#14-continuous-learning-loop)
+## 15. [Evaluation & Benchmarking](#15-evaluation--benchmarking)
+## 16. [Performance & Memory](#16-performance--memory)
+## 17. [Troubleshooting](#17-troubleshooting)
+## 18. [FAQ](#18-faq)
+## 19. [Developer Guide](#19-developer-guide)
+## 20. [Roadmap](#20-roadmap)
+
+---
+
+## 1. Introduction
+
+This chess engine is a self‑contained, pure‑Python implementation designed to run on low‑resource devices while still providing strong play through a neural network‑guided alpha‑beta search.  
+Every component—from the board representation to the training loop—is written from scratch, making it a complete educational and practical project.
+
+**Key Features**  
+- Fully legal move generation with castling, en passant, and all promotions.  
+- Dual‑head neural network (value + policy) with 783 input features and 20,480 move outputs.  
+- Incremental feature cache for efficient evaluation.  
+- Memory‑safe training: no giant one‑hot matrix; batched policy‑index training.  
+- Alpha‑beta search with iterative deepening, transposition table, null‑move pruning, and quiescence.  
+- Support for PGN parsing into training data.  
+- Capture‑tactical dataset generation.  
+- Web‑based control panel for analysis, training, and benchmarking.  
+- UCI protocol for external GUI integration.  
+- Automatic checkpointing and model versioning.  
+- Fully automated continuous‑improvement loop.
+
+**Philosophy**  
+- Single‑source‑of‑truth datasets.  
+- Reproducible, deterministic training (optional seed).  
+- Always evaluate before deploying a new model.  
+- Keep code minimal: no external deep learning frameworks.
+
+---
+
+## 2. Architecture Overview
+
+```
+
+```
+
+The engine is a **continuous improvement loop** – every game it plays generates training data, making it stronger over time.
+
+---
+
+## 3. Folder Structure
+
+```
+
+chess_ai/
+├── board.py                  # Board logic, move generation, perft
+├── move_helpers.py           # Move <-> index mapping (NUM_MOVES = 20480)
+├── nn.py                     # Dual-head neural network
+├── search.py                 # Alpha-beta search with NN
+├── uci_engine.py             # UCI protocol interface
+├── web_control.py            # Flask web dashboard
+├── pgn_learner.py            # PGN -> training samples
+├── train.py                  # Generic training script
+├── train_capture.py          # Legacy capture+base merger & trainer
+├── benchmark.py              # Speed and tactical benchmark
+├── run_tests.sh              # Full regression suite
+│
+├── training_data_5k_v2.pkl   # Base 5000-sample dataset (V2)
+├── capture_training.pkl      # 5940 capture examples (V2)
+├── training_data_master.pkl  # Merged master dataset (optional)
+│
+├── chess_nn.pkl              # Active model used by engine
+├── chess_nn_master.pkl       # Newly trained model (before activation)
+└── checkpoints/              # Per‑epoch model snapshots
+
+```
+
+---
+
+## 4. File‑by‑File Explanation
+
+### board.py
+**Purpose**: Core chess rules and board representation.  
+**Classes**: `ChessBoard`  
+- Stores the current position (64‑element array for pieces, side to move, castling rights, en passant square, halfmove clock, fullmove number).  
+- Generates all legal moves for the side to move.  
+- Handles special moves: castling, en passant, all four promotions.  
+- Detects check, checkmate, stalemate, threefold repetition, and fifty‑move rule.  
+- Maintains a Zobrist hash for transposition tables and repetition detection.  
+- Perft (performance test) functions to verify move generation correctness.  
+
+**Dependencies**: None.  
+**Used by**: `search.py`, `nn.py`, `pgn_learner.py`, `web_control.py`, and all other modules that need a board.
+
+### move_helpers.py
+**Purpose**: Converts between UCI move strings (e.g., "e2e4") and integer indices.  
+**Key Constants**:  
+- `NUM_MOVES = 20480` — the total size of the policy head output.  
+
+**Functions**:  
+- `move_to_index(move_uci)`: Returns an integer in [0, 20479].  
+- `index_to_move(idx)`: Returns the corresponding UCI string.  
+
+**Encoding scheme**:  
+- Basic moves: `from_square * 64 + to_square` → 0‑4031.  
+- Promotions: base offset + piece type * 64 + from_square, covering queen, rook, bishop, knight promotions.  
+- Castling is represented by the king’s movement (king from e1 to g1 for kingside).  
+- Many indices are unused; invalid indices are masked out during search.  
+
+This mapping is essential: the network’s policy head outputs 20480 logits, one for each possible move index.
+
+### nn.py
+**Purpose**: The neural network – defines the model architecture, training, evaluation, and feature extraction.  
+**Classes**:  
+- `FeatureCache` – incrementally updated feature vector for fast evaluation.  
+- `DualNet` – the neural network itself.  
+
+**Network architecture**:  
+- Input: 783 features (see Section 7).  
+- Hidden layers: two fully connected layers (default 512 → 256) with ReLU activation.  
+- Value head: Linear → Tanh → single scalar (white’s winning probability).  
+- Policy head: Linear → 20480 outputs; during inference, softmax is applied to obtain move probabilities.  
+
+**Training method**:  
+`train(positions, values, policies, epochs, lr, batch_size)`  
+- `positions`: list of `ChessBoard` objects.  
+- `values`: target float for value head.  
+- `policies`: target integer move indices (not one‑hot vectors).  
+- Memory‑safe batching: For each mini‑batch, a one‑hot matrix of shape `(batch_size, 20480)` is built from the policy indices, used for cross‑entropy loss, then discarded. This avoids storing a gigantic matrix for the entire dataset.  
+- Optimizer: plain SGD (NumPy).  
+- Saves the entire model (weights, biases) with `pickle`.  
+
+**Feature cache**: After a move is made/unmade, only the features affected by that move are updated, rather than recalculating all 783 features from scratch, dramatically speeding up evaluation during search.
+
+### search.py
+**Purpose**: Implements the search algorithm that finds the best move.  
+**Algorithm**: Fail‑soft negamax with alpha‑beta pruning.  
+**Key functions**:  
+- `search(board, depth, alpha, beta, ...)`: Recursive search.  
+- `iterative_deepening(board, max_time)`: Calls `search` with increasing depth until the time budget runs out.  
+
+**Features**:  
+- Move ordering: transposition table move, policy head probability, captures (MVV‑LVA), killer moves, history heuristic.  
+- Transposition table (Zobrist‑keyed hash map) stores previously evaluated positions, enabling exact‑score lookups and better move ordering.  
+- Null‑move pruning: Skips a move for the current side; if the null‑move search returns a score >= beta, the node is pruned.  
+- Quiescence search: At leaf nodes, examines only capture moves to avoid the horizon effect.  
+- Iterative deepening: The best move from the previous depth is searched first in the next iteration.  
+
+**Evaluation**: Leaf nodes are evaluated by calling `net.evaluate(board)`, which uses the neural network’s value head.
+
+### uci_engine.py
+**Purpose**: Implements the Universal Chess Interface (UCI) protocol.  
+Listens on standard input for commands:  
+- `uci`, `isready`, `position`, `go`, `stop`, `quit`.  
+Outputs `bestmove` and evaluation info to standard output.  
+Allows the engine to be used with any UCI‑compatible GUI (e.g., Arena, CuteChess, Lichess bots).
+
+### web_control.py
+**Purpose**: A Flask web application for local control and testing.  
+Routes:  
+- `/` – main dashboard (analysis, play, training, benchmarks).  
+- `/analyse` – accepts FEN and returns best move, evaluation, and PV.  
+- `/play` – human vs. engine game.  
+- `/benchmark` – runs `benchmark.py` and displays results.  
+- `/train` – triggers training and shows progress.  
+
+Intended for development and casual use; not a production server.
+
+### pgn_learner.py
+**Purpose**: Converts PGN game files into V2 training datasets.  
+For each move in every game:  
+- Creates a `ChessBoard` representing the position before the move.  
+- Records the game result (from white’s perspective) as the target value.  
+- Converts the played move to an integer index via `move_helpers.move_to_index()`.  
+
+Output: A pickle file containing a dictionary with keys `positions`, `values`, `policies`.
+
+### train.py
+**Purpose**: The main training script.  
+Loads a single V2 dataset, validates it, filters out samples with invalid policies, loads or creates a master model (`chess_nn_master.pkl`), and runs the training loop.  
+Saves per‑epoch checkpoints and updates the master model after each epoch.
+
+### benchmark.py
+**Purpose**: Measures search speed (nodes per second), tactical accuracy (mate‑in‑1 solving), and self‑play stability.  
+Produces a timestamped report file.
+
+### run_tests.sh
+**Purpose**: Regression test suite.  
+Checks: Zobrist hash integrity, move index round‑trip, perft numbers (depth 1‑5), incremental feature cache correctness, random FEN round‑trip, and special move edge cases.  
+Must pass before any new model is activated.
+
+---
+
+## 5. Chess Board Representation
+
+The `ChessBoard` class stores all state in a few arrays and scalars, keeping it extremely lightweight.  
+
+### Piece encoding
+- 0 = empty  
+- 1 = white pawn, 2 = white knight, 3 = white bishop, 4 = white rook, 5 = white queen, 6 = white king  
+- Negative values for black pieces.
+
+### Internal attributes
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `board` | list of 64 ints | Current piece placement (index = square 0..63). |
+| `side_to_move` | int (0/1) | 0 = white, 1 = black. |
+| `castling_rights` | int (4 bits) | Bit 0 = white kingside, 1 = white queenside, 2 = black kingside, 3 = black queenside. |
+| `ep_square` | int or None | En passant target square, if any. |
+| `halfmove_clock` | int | Moves since last capture/pawn advance (50‑move rule). |
+| `fullmove_number` | int | Starts at 1, increments after black’s move. |
+| `zobrist_hash` | 64‑bit int | Incrementally updated hash for transposition and repetition. |
+
+### Move generation
+The board generates moves in three steps:
+1. Generate pseudo‑legal moves for each piece (ignoring check).
+2. Filter out moves that leave the own king in check.
+3. For castling, ensure the king does not cross or land on an attacked square.
+
+All special moves (promotions, en passant, castling) are produced automatically. Promotions include queen, rook, bishop, and knight choices.
+
+### Making / unmaking a move
+The board supports `make_move(move)` and `unmake_move()`. Unmake restores the exact previous state, which is crucial for search efficiency. The Zobrist hash is updated incrementally during make/unmake.
+
+### Hashing
+A table of 12 × 64 random 64‑bit integers is used. The current hash is updated by XOR‑ing the relevant piece/square keys whenever a piece moves or is captured. The hash of the side to move, castling rights, and en passant square are also XOR‑ed in.
+
+---
+
+## 6. Move Generation & Indexing
+
+The engine uses a fixed move indexing scheme to represent any legal move as a single integer between 0 and 20479. This integer is the output size of the policy head.
+
+### Move index layout
+| Range | Content |
+|-------|---------|
+| 0 – 4031 | Normal moves (from_square * 64 + to_square) |
+| 4032 – 8191 | Queen promotions (from_square, promo_type offset) |
+| 8192 – 12287 | Rook promotions |
+| 12288 – 16383 | Bishop promotions |
+| 16384 – 20479 | Knight promotions |
+
+Note: The ranges overlap conceptually, but the mapping ensures every legal move gets a unique index. Many indices correspond to illegal moves; they are never selected.
+
+### Usage during training
+The training dataset stores the integer index of the played move (the “policy target”). Inside `nn.py`, the target is converted into a one‑hot vector of length 20480 **only for the current batch**, preserving memory.
+
+### Move ordering during search
+During search, the policy head returns a probability distribution over all 20480 indices. The search then picks the most promising moves first:  
+1. Transposition table best move.
+2. Moves with high policy probability.
+3. Captures (MVV‑LVA).
+4. Killer moves / history heuristic.
+Invalid moves are immediately discarded.
+
+### Move helpers API
+- `move_to_index(uci_string)` → int  
+- `index_to_move(int)` → uci_string  
+- `NUM_MOVES = 20480`
+
+The conversion table is built once at import time and stored in two dictionaries for O(1) lookup.
+
+---
+
+## 7. Neural Network Architecture
+
+### 7.1 Input Features (783)
+The network receives a feature vector of size 783, extracted from a `ChessBoard`. The features include:
+
+- **Piece‑square indicators (768)** – for each of 12 piece types × 64 squares, a binary value indicating whether that piece is present.  
+- **Side to move** (1) – 1.0 for white, 0.0 for black.  
+- **Material difference** (5) – difference in count of pawns, knights, bishops, rooks, queens (white – black).  
+- **Mobility** (2) – number of legal moves for white and black (normalized).  
+- **King safety** (2) – pawn shield indicators for both kings.  
+- **Pawn structure** (5) – doubled pawns, isolated pawns, passed pawns for both sides (simplified).  
+
+Total: 783 scalars. This compact representation keeps forward pass very fast.
+
+### 7.2 Network Topology
+```
+
+Input (783)
+│
+▼
+Dense (512) + ReLU
+│
+▼
+Dense (256) + ReLU
+│
+├──────────────┐
+▼              ▼
+Value Head      Policy Head
+Dense(1)        Dense(20480)
+│
+Tanh → scalar
+
+```
+- **Value head** outputs a scalar in [-1, 1], interpreted as white’s winning probability (mapped to [0,1] via `(tanh+1)/2`).  
+- **Policy head** outputs 20480 logits; during inference, softmax converts them into a probability distribution over moves.
+
+### 7.3 Training Details
+- **Loss function**: Mean squared error for the value head, cross‑entropy for the policy head. Total loss = value_loss + λ * policy_loss (λ = 1.0).  
+- **Optimizer**: Plain stochastic gradient descent. No momentum, no weight decay.  
+- **Batch size**: Typically 32 (adjustable).  
+- **Learning rate**: 0.0005 (adjustable).  
+- **Memory management**: The entire dataset is kept in memory, but only the `positions` (ChessBoard objects), `values` (floats), and `policies` (ints). The one‑hot conversion is done per batch inside `train()` and immediately discarded, keeping peak RAM low.
+
+### 7.4 Feature Cache
+The `FeatureCache` object stores the current feature vector and knows which features change after a specific move. When a move is made, only the affected features (piece moved, captured piece, castling rights, etc.) are updated, avoiding a full re‑extraction of 783 features every time the board changes. This is critical for search speed.
+
+### 7.5 Saving and Loading
+The entire network is saved with `pickle` (`.pkl`). No separate weight files; the model is a single Python object. This makes it trivial to transport between devices (phone → PC and back).
+
+---
+
+## 8. Dataset System & Format
+
+### 8.1 V2 Format (Current)
+All datasets used for training must be a Python dictionary with exactly three keys:
+
+```python
+{
+    "positions": [ChessBoard_obj1, ChessBoard_obj2, ...],
+    "values":    [0.73, 0.45, 1.0, ...],
+    "policies":  [3902, 783, 20479, ...]
+}
+```
+
+· positions – list of ChessBoard objects representing the position before the move was played.
+· values – game result from white’s perspective: 1.0 (white win), 0.0 (black win), 0.5 (draw).
+· policies – integer move index (0‑20479) of the actual move played in the game.
+
+### 8.2 V1 Format (Legacy)
+
+Earlier versions stored each sample as a 9‑tuple:
+(board, policy_index, uci_move, value, result, white_elo, black_elo, event, date)
+This is no longer used for training, but conversion scripts exist to extract the three required lists.
+
+### 8.3 Creating Datasets
+
+· From PGN files – pgn_learner.py reads one or more PGN files and outputs a .pkl file in V2 format.
+· From capture generation – A dedicated script (or manual construction) produces a V2 file where every sample contains a winning capture opportunity.
+· From self‑play – After playing games, export the PGN, then convert with pgn_learner.py.
+
+### 8.4 Master Dataset
+
+To avoid managing many separate files, it’s recommended to keep a single master dataset (e.g., training_data_master.pkl) that accumulates all training examples. New data (from PGNs or capture generation) is merged into it using a simple script:
+
+```python
+import pickle
+with open('training_data_master.pkl','rb') as f: master = pickle.load(f)
+with open('new_data.pkl','rb') as f: new = pickle.load(f)
+for k in ('positions','values','policies'):
+    master[k].extend(new[k])
+with open('training_data_master.pkl','wb') as f:
+    pickle.dump(master, f)
+```
+
+### 8.5 Validation
+
+Before training, train.py validates:
+
+· All three lists have equal length.
+· First few positions are ChessBoard instances.
+· Policy indices are within [0, NUM_MOVES-1].
+  Samples with invalid policies are filtered out.
+
+---
+
+## 9. Capture Training
+
+Why capture training?
+The base training data consists of full games, most moves are quiet positional moves. The network often fails to recognize free captures because it rarely sees them with high frequency.
+
+We therefore explicitly generate capture examples: positions where one side can capture a hanging piece (queen, rook, bishop, knight, pawn) or perform a winning exchange.
+
+These positions are added to the master dataset, teaching the network to:
+
+· Assign high policy probability to the capture move.
+· Increase the value evaluation for the capturing side.
+
+How capture data is created
+
+1. Self‑play or analysis identifies a position with an undefended piece.
+2. The correct capture move is recorded as the policy target.
+3. The game outcome (or a heuristic value) is stored.
+
+Effect
+After training on these examples, the engine is significantly better at spotting and executing immediate captures, avoiding “blindness” to hanging material.
+
+Limitations
+Capture training only improves recognition of existing tactical opportunities. It does not teach the engine to set up tactics or complex combinations. For that, more advanced training (e.g., self‑play reinforcement learning) is needed.
+
+---
+
+## 10. Training Pipeline
+
+The complete training workflow is encapsulated in a few steps:
+
+1. Prepare the master dataset – ensure it contains all desired training samples (base games + capture).
+2. Configure – edit train.py to set DATASET to the master file path, adjust epochs, batch size, learning rate.
+3. Run training – python3 train.py.
+4. Activate the model – after training, copy chess_nn_master.pkl to chess_nn.pkl (backup first!).
+5. Restart engine – python3 web_control.py (or UCI engine).
+6. Evaluate – run bash run_tests.sh and benchmark against the old model.
+
+Checkpoints
+After each epoch, the model is saved both as chess_nn_master.pkl and as a timestamped/zero‑padded checkpoint in the checkpoints/ folder. If a later epoch overfits, you can roll back to an earlier checkpoint.
+
+Interrupt safety
+train.py catches KeyboardInterrupt (Ctrl+C) and saves the current model before exiting, so no progress is lost.
+
+Training reports
+At the end of each run, train.py writes training_report.txt with details: start/finish time, dataset sizes, batch, learning rate, seed, etc.
+
+---
+
+## 11. Search Algorithm
+
+The engine uses a fail‑soft negamax framework with alpha‑beta pruning and several advanced features.
+
+Core Search Function
+
+```python
+def search(board, depth, alpha, beta, allow_null=True):
+    if depth == 0:
+        return quiescence(board, alpha, beta)
+    # Transposition table lookup
+    # Null move heuristic
+    # Generate & order moves
+    # Recurse
+    # Update TT, return score
+```
+
+Iterative Deepening
+
+The search begins at depth 1 and increases until the time limit is reached. The best move from the previous iteration is tried first in the next, greatly improving move ordering and alpha‑beta efficiency.
+
+Null‑Move Pruning
+
+Before generating moves, the search tries a "null move" (pass) for the side to move with a reduced depth (usually R=2 or 3). If the null‑move score is >= beta, the node is pruned, assuming the position is too good to be allowed.
+
+Quiescence Search
+
+At the horizon, only capture moves are examined to prevent the engine from overlooking recaptures or hanging pieces. This avoids the “horizon effect”. The quiescence search can be limited by a capture depth cap.
+
+Time Management
+
+The iterative deepening loop checks elapsed time after each depth. When time is nearly exhausted, it stops deepening and returns the best move from the previous complete iteration.
+Time allocation can be adjusted (fixed time per move, or a fraction of remaining game time).
+
+Transposition Table (TT)
+
+A fixed‑size hash table (default 100,000 entries) stores previously evaluated positions, keyed by Zobrist hash. Each entry holds:
+
+· Score (with bounds), depth, flag (exact, lowerbound, upperbound), best move.
+  The TT is used for move ordering (try TT best move first) and to avoid re‑searching positions already evaluated at sufficient depth.
+
+---
+
+## 12. Move Ordering & Transposition Table
+
+Good move ordering is critical for alpha‑beta efficiency. The engine orders moves as follows:
+
+1. Transposition table move – if the current position has a stored best move, it is tried first.
+2. Policy head probability – moves with higher probability from the neural network are examined earlier.
+3. Captures – sorted by MVV‑LVA (Most Valuable Victim – Least Valuable Attacker). Winning captures (e.g., queen takes pawn) are prioritized.
+4. Killer moves – moves that caused a beta‑cutoff in sibling nodes (two slots per depth).
+5. History heuristic – a table of moves that have been good historically, giving a small boost.
+
+After the TT move, the policy head provides the most valuable ordering information. This is why training the policy head on high‑quality games is so important.
+
+Killer Moves
+
+Two killer moves are stored per search depth. Whenever a non‑capture move causes a beta cutoff, it replaces one of the killers. They are tried before any other quiet moves.
+
+History Heuristic
+
+A 64×64 table (from‑square, to‑square) that accumulates a bonus for moves that cause beta cutoffs. Moves with higher history values are searched earlier.
+
+Transposition Table Details
+
+· Replacement scheme: always replace if the new entry has greater depth.
+· The table is cleared before a new search (except during iterative deepening).
+· Entries store an exact score, lowerbound, or upperbound flag to reuse results even when alpha‑beta windows change.
+
+---
+
+## 13. Web Interface & UCI Engine
+
+Web Interface (web_control.py)
+
+A lightweight Flask application that provides a graphical interface accessible from a browser on the same device (or local network).
+
+Endpoints
+
+· / – main page with links to analysis, play, training, and benchmarks.
+· /analyse – Enter a FEN; the engine returns the best move, evaluation score, and principal variation.
+· /play – Interactive board where you can make moves, and the engine replies (or human vs. human).
+· /train – Triggers training and shows real‑time progress in the browser.
+· /benchmark – Runs benchmark.py and displays the report.
+
+Usage
+Start the server: python3 web_control.py
+Open http://localhost:5000 in Termux’s browser (or on a PC if port‑forwarded).
+
+Security
+Not hardened for public exposure. Use only on trusted networks.
+
+UCI Engine (uci_engine.py)
+
+Implements the Universal Chess Interface so the engine can be loaded by standard chess GUIs (Arena, CuteChess, BanksiaGUI, etc.) or used with Lichess bots.
+
+Communication
+Reads commands from stdin, writes responses to stdout.
+
+Supported commands:
+
+· uci – identify engine and options.
+· isready – respond readyok.
+· position [fen | startpos] moves ... – set up board.
+· go [wtime] [btime] [movetime] [depth] ... – start search.
+· stop – stop search and return bestmove.
+· quit – exit.
+
+Integration
+To use with a GUI, add the engine with command: python3 /path/to/uci_engine.py.
+
+---
+
+## 14. Continuous Learning Loop
+
+The engine is designed for self‑improvement through a closed loop:
+
+```
+1. Collect PGNs (self‑play, Lichess download, human games)
+2. pgn_learner.py → new_dataset.pkl
+3. Merge into master dataset
+4. train.py → chess_nn_master.pkl
+5. Activate (cp master -> chess_nn.pkl)
+6. Play games (Engine vs Random, self‑play, or human)
+## 7 Export those games as PGN → back to step 1
+```
+
+Automation
+All steps can be automated with shell scripts. For example:
+
+```bash
+# auto_train.sh
+python3 pgn_learner.py --input new_games.pgn --output new_data.pkl
+python3 merge.py  # merges new_data into master
+python3 train.py
+cp chess_nn_master.pkl chess_nn.pkl
+python3 web_control.py &
+```
+
+Frequency
+On a phone, a full training cycle (10k samples, 3 epochs) takes only ~2 minutes. You can run it nightly, after accumulating a few hundred new positions.
+
+Measuring improvement
+Never assume the new model is better. After each cycle, run the evaluation suite (Section 15). Only keep the new model if it shows clear improvement in tactical tests or vs‑Random performance.
+
+---
+
+## 15. Evaluation & Benchmarking
+
+Evaluation is a mandatory step after every training run. Do not skip it.
+
+a) Regression Tests
+
+```bash
+bash run_tests.sh
+```
+
+Ensures the board, move generation, and feature cache are still bug‑free. Must pass 100%.
+
+b) Perft
+
+Perft (performance test) counts the number of legal move paths up to a given depth from a position. The script compares counts against known good values from standard chess positions.
+Example: from startpos, depth 5 should be 4,865,609 nodes.
+
+c) Tactical Suite
+
+Create a list of FENs containing a hanging piece or a clear winning capture.
+Use a simple script to query the engine at a fixed depth (e.g., depth 3) and check whether the best move is the expected capture. Compare the old model vs. the new model.
+
+d) 100 Games vs Random
+
+Run 100 games against a random mover (or a very weak fixed evaluator). Record win/draw/loss percentages.
+Run with old model, then new model, and compare. Even a small increase (e.g., from 85% to 88% wins) indicates meaningful improvement.
+
+e) Self‑Play
+
+Play old model vs new model for, say, 50 games with symmetric conditions (same time per move). If the new model scores >50% (+ a margin), it’s genuinely stronger.
+
+f) Benchmark Script (benchmark.py)
+
+Reports:
+
+· Nodes per second (NPS) from several test positions.
+· Tactical accuracy (mate‑in‑1 solving).
+· Self‑play stability (illegal moves, crashes).
+  Output saved as benchmark_YYYYMMDD_HHMMSS.txt.
+
+---
+
+## 16. Performance & Memory
+
+Training memory
+For 10,940 samples (positions + values + policy indices):
+
+· positions: ~10k ChessBoard objects → ~5 MB
+· values and policies: negligible
+· During training, the one‑hot matrix for a batch of 32 has shape (32, 20480) → ~2.5 MB
+· Total RAM: < 50 MB, easily fits on a phone.
+
+Training speed
+On a typical Android phone (Snapdragon 8‑core), one epoch over 10k samples with batch size 32 takes ~30‑35 seconds. Three epochs finish in under 2 minutes.
+
+Inference speed
+A single forward pass (feature extraction + net evaluation) takes ~1‑2 ms. Within a search, many evaluations are cached via the transposition table, so the network is not the bottleneck.
+
+Model size
+chess_nn.pkl: ~1.5 MB (compressed pickle). Very portable.
+
+Checkpoint size
+Same as the model file. Keeping the last 5‑10 checkpoints uses negligible storage.
+
+---
+
+## 17. Troubleshooting
+
+Problem Cause Solution
+ERROR: training_data_5k_v2.pkl not a dict Old format (list/tuple) Convert using provided script (Section 8.2).
+Training RAM explosion Model loaded incorrectly Ensure policy_is_indices=True in train() and that the data is integer indices, not one‑hot.
+Engine plays illegal moves board.py bug or search returning invalid index Run bash run_tests.sh; fix move generation.
+Model not improving Too few epochs, low learning rate Increase epochs or LR; add more training data.
+Very slow search Transposition table too small or no move ordering Increase TT size, ensure policy head is being used for ordering.
+Web interface not accessible Flask not installed pip install flask
+UCI engine not responding I/O buffering issue Use python3 -u uci_engine.py to flush output.
+
+---
+
+## 18. FAQ
+
+Q: Why 20480 moves?
+Our encoding covers all possible from‑to squares (4032 basic moves) plus all promotion combinations, giving exactly 20480 indices. Many are illegal in any given position, but the policy head simply outputs a probability for each; illegal ones are masked during search.
+
+Q: Why use pickle for datasets and models?
+It natively serializes Python objects (like ChessBoard) without requiring custom converters. It’s fast and sufficient for a single‑user project. For production, one might switch to a more portable format (e.g., JSON with FEN strings), but pickle is convenient.
+
+Q: Why not TensorFlow / PyTorch?
+They are heavy dependencies that don’t run well on older Android devices. Our pure‑NumPy implementation gives full control and keeps the project dependencies minimal (only numpy and flask for the web UI).
+
+Q: How do I resume training from a checkpoint?
+Copy the desired checkpoint to chess_nn_master.pkl and run train.py again. It will continue from that state. However, the dataset will be trained again from scratch; we do not store optimizer state.
+
+Q: Can I train on a PC and copy the model to my phone?
+Yes. The .pkl files are architecture‑independent. Train on any machine, then copy chess_nn_master.pkl to the phone and rename it to chess_nn.pkl. The engine will use it immediately.
+
+Q: What’s the ideal dataset size?
+Even 10k samples improve the engine noticeably. For stronger play, aim for 100k‑500k positions. PGNs from master‑level games (Lichess Elite database) are excellent.
+
+Q: How can I add my own features to the NN?
+Modify extract_features() in nn.py. Add new scalars to the feature vector, increase INPUT_SIZE, and adjust the first layer weight shape. Retrain from scratch.
+
+Q: The engine is weaker after training. Why?
+Possible reasons: overfitting (use fewer epochs, add regularization), biased data (e.g., only losing games), or bugs in data generation. Always evaluate against the previous model.
+
+---
+
+## 19. Developer Guide
+
+Modifying the Neural Network
+
+· Change hidden layer sizes in DualNet.__init__().
+· Add new features in extract_features(); update INPUT_SIZE.
+· The training code in train() is self‑contained and can be replaced with a better optimizer (e.g., Adam).
+
+Adding Search Enhancements
+
+· All search logic is in search.py. To add aspiration windows, modify iterative_deepening().
+· To experiment with different pruning, adjust null_move_pruning() or add futility pruning.
+
+Dataset Generation
+
+· pgn_learner.py can be extended to filter games by Elo, date, or opening.
+· To generate capture data, write a script that scans positions for hanging pieces using the board’s attack maps.
+
+Testing
+
+· Run bash run_tests.sh after every code change.
+· Add new perft positions to verify move generation correctness.
+
+Coding Style
+
+· Follow PEP 8 as much as possible.
+· Keep functions small and self‑explanatory.
+· Document any new features in this README.
+
+---
+
+## 20. Roadmap
+
+### Phase-0 Audit & Stabilisation
+Static defect remediation B-020 through B-034 has been completed.
+Python syntax verification has passed for the modified core files.
+Runtime verification RV-01 through RV-08 has passed.
+See `AUDIT_STATUS.md` for the current verification baseline.
+
+
+Short‑term (next few weeks)
+
+· Unify all datasets into a versioned master file.
+· Add resume training from checkpoint with optimizer state.
+· Improve quiescence search to include checks.
+· Integrate move‑overhead and time‑management calibration.
+
+Medium‑term
+
+· Implement NNUE‑style efficient updates for faster evaluation.
+· Add endgame tablebase probing (Syzygy).
+· Distributed self‑play across multiple devices (via simple socket).
+· Automated Elo tracking and model selection.
+
+Long‑term
+
+· Reinforcement learning from self‑play (AlphaZero‑style).
+· GPU support (CuPy or TensorFlow Lite) for training acceleration.
+· Opening book learning from engine analysis.
+· Full Android app with a polished UI.
+
+---
+
+Maintained with passion for chess and code.
+Last updated: 2026‑06‑28
+
+
+
+---
+
+## Project Workspace Separation — 2026-08-23
+
+The project now distinguishes between the active workspace and historical material.
+
+- Active workspace: `~/chess_ai/`
+- Historical archive: `~/chess_ai_historical_2026-08-23/`
+
+The historical archive contains rollback snapshots, obsolete implementations,
+experimental/debug files, generated diagnostics, and previous model/database versions.
+
+Historical files are moved, not deleted, so rollback/reference material remains
+available outside the active runtime workspace.
+
+The active workspace retains:
+
+- production source
+- current frontend
+- current documentation
+- evaluation modules
+- supported tests/scripts
+- production database
+- active models
+- opening-tree/runtime artifacts
+- supported training/import assets
+
+Historical archive contents must not be treated as active runtime dependencies.

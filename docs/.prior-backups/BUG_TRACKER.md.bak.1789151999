@@ -1,0 +1,86 @@
+# Chess AI Bug Tracker
+**Project:** Chess AI · **Type:** Static source audit · **Date:** 2026-08-09
+
+## Summary
+| Category | Count |
+|---|---:|
+| Fixed bugs (verified in current source) | 19 |
+| Confirmed Phase-0 defects (now fixed) | 15 |
+| Runtime verification required | 8 |
+| Improvements (non-defects) | 17 |
+
+---
+
+## Fixed Bugs (B-001 – B-019)
+| ID | Severity | File | Description |
+|---|---|---|---|
+| B-001 | Critical | `search.py` | Neural value head disabled (`NN_SCALE = 0`) – changed to 800 |
+| B-002 | High | `search.py` | Transposition table eviction was LIFO – changed to FIFO via `OrderedDict` |
+| B-003 | High | `search.py` | En-passant not treated as capture in LMR/killer logic |
+| B-004 | Critical | `parallel_search.py` | Returned 3 values instead of 4 – added `self.nodes` |
+| B-005 | Critical | `uci_engine.py` | Unpacked 3 values from search result – now unpacks 4 |
+| B-006 | High | `web_control.py` | `get_fen()` called instead of `to_fen()` in live game state |
+| B-007 | Critical | `web_control.py` | `LiveGame` class missing – `def run(self):` was nested inside `static_files` |
+| B-008 | Critical | `web_control.py` | `/api/human_move` endpoint missing – added |
+| B-009 | High | `web_control.py` | `result` undefined in `run_human_game` on early stop – initialized to `"*"` |
+| B-010 | Medium | `web_control.py` | Busy-wait `time.sleep(0)` burned CPU – changed to `0.05` |
+| B-011 | Medium | `web_control.py` | Race condition on `engine_color` – moved assignment inside `test_batch_lock` |
+| B-012 | Medium | `web_control.py` | `all_pgns_count` missing from batch status – added |
+| B-013 | High | `web_control.py` | Broken live-game locking – replaced with module-level `live_game_lock` |
+| B-014 | Medium | `batch.js` | Wrong element ID `batchOpponent` – corrected to existing `batch-opponent` handling |
+| B-015 | Low | `batch.js` | Duplicate Stockfish analysis block – deleted |
+| B-016 | Low | `web_control.py` | Duplicate imports (`threading`, `time`, `random`) – cleaned |
+| B-017 | High | `analysis.js` | `stateFromFEN` not exposed globally – fixed |
+| B-018 | Medium | `board.js` | Manual board clicks did not trigger re-analysis – analysis call added |
+| B-019 | Low | `train.py` | Legacy format policy index extraction – corrected |
+
+---
+
+## Phase-0 Confirmed Defects (B-020 – B-034)
+| ID | Severity | File | Description |
+|---|---|---|---|
+| B-020 | Critical | `board.py` | `undo_move` does not restore repetition count of pre-move position |
+| B-021 | Critical | `web_control.py` | Inverted checkmate result |
+| B-022 | Critical | `web_control.py` | Model path split-brain (`distilled_nn.pkl` vs `chess_nn.pkl`) |
+| B-023 | Critical | `web_control.py` | No lock around shared analysis engine |
+| B-024 | Critical | `web_control.py` | SSE `fen_queue.get()` blocks without timeout |
+| B-025 | Critical | `batch.js` | Human polling uses `data.fen` instead of `data.current_fen` |
+| B-026 | High | `search.py` | Aspiration timeout returns bound instead of true score |
+| B-027 | Critical | `uci_engine.py` | Single-thread UCI mode crashes due to `stop_event` / unpack handling |
+| B-028 | High | `generate_themed_data.py` | Unpacking 3 values from a 4-tuple search result |
+| B-029 | High | `mcts.py` | MCTS selection formula sign-inverted |
+| B-030 | High | training modules | Policy targets passed as integer indices when `nn.train()` expects one-hot |
+| B-031 | Medium | `web_control.py` | `fen_queue` unbounded |
+| B-032 | Medium | `uci_engine.py` | `go infinite` uses default 3-second time limit |
+| B-033 | Medium | `web_control.py` | `/api/analyze_sf` bare `raise` can return HTML error page |
+| B-034 | Medium | `web_control.py` | Background batch/human game threads lack top-level exception handler |
+| B-035 | Medium | `search.py` | Missing `import threading` – fixed during runtime verification |
+
+---
+
+## Runtime Verification
+| Test | Status |
+|---|---|
+| RV-01 | PASS    |
+| RV-02 | PASS    |
+| RV-03 | PASS    |
+| RV-04 | PASS    |
+| RV-05 | PASS    |
+| RV-06 | PASS    |
+| RV-07 | PASS    |
+| RV-08 | PASS    |
+
+
+---
+
+## 2026-08-23 Production Update
+
+- schema_version: 5
+- games: 14,916
+- game_moves: 1,031,269
+- import_batches: 67
+- import_records: 23,496
+- sync_jobs: 2
+- source_username NULL: 0
+- canonical identity: jothi
+- tree_dirty: 0 for both sources

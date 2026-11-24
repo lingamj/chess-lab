@@ -1,0 +1,98 @@
+# Chess AI – Product Roadmap
+**Project:** Personal Chess AI
+
+## Current Baseline
+**Phase-0 audit completed:** 2026-08-09
+Static remediation is complete. Runtime verification has passed.
+
+## Phase-0 – Audit & Stabilisation
+- Resolve B-020 through B-034
+- Preserve the earlier B-001 through B-019 fixes
+- Complete Python syntax verification
+- Execute RV-01 through RV-08
+
+## Phase-1 – Personal Game Database
+- Import 3,000+ games from Lichess / Chess.com / PGN
+- Store metadata, positions, and move sequences
+- Search and filter by opening, opponent, date, result
+
+## Phase-2 – Game Analyzer
+- Engine analysis for every move
+- Mistake classification
+- Tactical theme detection
+- “Why was this bad?” explanations
+
+## Phase-3 – Personal Intelligence
+- Recurring mistake detection
+- Strength/weakness profile
+- Opening performance analysis
+- Position-type analysis
+- Time-management analysis
+
+## Phase-4 – Personal Trainer
+- Automatic exercise generation from mistakes
+- Spaced repetition
+- Repertoire drilling
+- Progress tracking
+
+## Phase-5 – Neural Learning
+- Train NN on personal games
+- Versioned model management
+- Automated Elo testing
+- Promote only stronger models
+
+## Phase-6 – Continuous Improvement Loop
+- Auto-import new games
+- Auto-analyse and update profile
+- Scheduled model retraining
+- Full regression test suite
+
+============================================================
+ PRESERVED CONTENT: Original docs/ROADMAP.md content preserved
+============================================================
+
+# ROADMAP
+## Phase-0 Audit & Stabilisation
+Static defect remediation B-020 through B-034 has been completed.
+Runtime verification RV-01 through RV-08 has passed.
+See `AUDIT_STATUS.md` for the current verification baseline.
+
+
+---
+
+## 2026-08-23 Current Checkpoint
+
+Completed:
+- Phase-0 Audit & Stabilisation
+- Sync accounting repair
+- Zero-move handling
+- Statistics & Database Insights: B1, B1.1, B2, B3, B4
+- D1 Data & Provenance Normalization: D1.0 through D1.4
+
+Current schema/version:
+- schema_version: 5
+- canonical_players: 1
+- player_aliases: 2
+- source_username NULL: 0
+
+Pending:
+- D1.5 Documentation Update
+- Position-wise Analytics
+- Repertoire Intelligence
+- Game Analysis
+- Personal Intelligence
+- Training
+- Neural Learning Pipeline
+- Android/Product Hardening
+
+
+---
+
+## 2026-08-23 — Workspace Separation
+
+Active workspace: `~/chess_ai/`
+Historical archive: `~/chess_ai_historical_2026-08-23/`
+
+The archive is preserved for rollback/reference and may contain older
+implementations, experiments, and generated diagnostics. It is not an active
+runtime dependency.

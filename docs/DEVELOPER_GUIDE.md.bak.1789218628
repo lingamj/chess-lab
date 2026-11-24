@@ -1,0 +1,27 @@
+# DEVELOPER_GUIDE
+
+
+## Production Guardrails
+- Live ~/chess_ai is authoritative.
+- Run read-only diagnostics before writes.
+- Create WAL-safe backups before migrations.
+- Validate on isolated DB snapshots for risky changes.
+- Do not modify games.white/games.black historical values.
+
+## Canonical Identity
+- canonical_players.canonical_name is stable.
+- player_aliases maps historical names to canonical identity.
+
+
+---
+
+## Workspace Hygiene — 2026-08-23
+
+Before archiving or removing an old file:
+
+1. Determine whether current runtime code references it.
+2. Determine whether it contains unique useful knowledge.
+3. Merge unique useful knowledge into the authoritative current file when appropriate.
+4. Preserve rollback material in the historical archive.
+5. Do not delete historical material merely because it is old.
+6. Verify the live application after moving files.

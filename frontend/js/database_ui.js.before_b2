@@ -1,0 +1,858 @@
+/* Database-backed dashboard/navigation layer.
+ * Keeps SQLite as the source of truth for games, stats and node details.
+ */
+(function () {
+  'use strict';
+
+  const DB = {
+    games: [],
+    byId: new Map(),
+    loaded: false,
+    requestId: 0,
+    dashboard: null,
+    gamesPageSize: 250,
+    gamesPage: 1,
+    lastGamesSortKey: null,
+  };
+  window._DB_GAMES = DB.games;
+  window._DB_GAME_BY_ID = DB.byId;
+  window._DB_LOADED = false;
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, ch => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;'
+    }[ch]));
+  }
+
+  function gameFromRow(row) {
+    const firstMoves = String(row.first_moves || '').trim();
+    const moves = firstMoves ? firstMoves.split(/\s+/) : [];
+    return {
+      id: Number(row.id),
+      white: row.white || '',
+      black: row.black || '',
+      result: row.result || '',
+      whiteElo: Number(row.white_elo || 0),
+      blackElo: Number(row.black_elo || 0),
+      date: row.date || '',
+      moves_count: Number(row.moves_count || 0),
+      first_moves: moves,
+      eco: row.eco || '',
+      opening: row.opening || '',
+      termination: row.termination || '',
+      platform_game_id: row.platform_game_id || null,
+      source: row.source || ''
+    };
+  }
+
+  function setSummary(text) {
+    const el = document.getElementById('gamesSummary');
+    if (el) el.textContent = text;
+  }
+
+  function renderGamesTable() {
+    const body = document.getElementById('gamesTableBody');
+    if (!body) return;
+    body.innerHTML = '';
+    if (!DB.games.length) {
+      setSummary('No games loaded.');
+      const prevBtn = document.getElementById('gamesPrevBtn');
+      const nextBtn = document.getElementById('gamesNextBtn');
+      const pageInfo = document.getElementById('gamesPageInfo');
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
+      if (pageInfo) pageInfo.textContent = 'Page —';
+      return;
+    }
+
+    const col = window._gamesSortCol || 'index';
+    const dir = window._gamesSortDir === 'desc' ? -1 : 1;
+
+    // When the sort column or direction changes, return to page 1.
+    const sortKey = `${col}:${dir}`;
+    if (DB.lastGamesSortKey !== sortKey) {
+      DB.gamesPage = 1;
+      DB.lastGamesSortKey = sortKey;
+    }
+
+    const rows = DB.games.slice();
+    rows.sort((a, b) => {
+      let va, vb;
+      if (col === 'index') { va = a.id; vb = b.id; }
+      else if (col === 'white') { va = a.white; vb = b.white; }
+      else if (col === 'black') { va = a.black; vb = b.black; }
+      else if (col === 'result') { va = a.result; vb = b.result; }
+      else if (col === 'whiteElo') { va = a.whiteElo; vb = b.whiteElo; }
+      else if (col === 'blackElo') { va = a.blackElo; vb = b.blackElo; }
+      else if (col === 'date') { va = a.date; vb = b.date; }
+      else if (col === 'moves') { va = a.moves_count; vb = b.moves_count; }
+      else { va = a.first_moves.join(' '); vb = b.first_moves.join(' '); }
+      if (typeof va === 'string') return va.localeCompare(vb) * dir;
+      return (va - vb) * dir;
+    });
+
+    const total = rows.length;
+    const pageSize = Number(DB.gamesPageSize || 250);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    if (DB.gamesPage < 1) DB.gamesPage = 1;
+    if (DB.gamesPage > totalPages) DB.gamesPage = totalPages;
+
+    const page = DB.gamesPage;
+    const start = (page - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
+
+    pageRows.forEach((g, i) => {
+      const globalIndex = start + i + 1;
+      const tr = document.createElement('tr');
+      tr.dataset.gameId = String(g.id);
+      tr.innerHTML = `<td>${globalIndex}</td><td>${esc(g.white)}</td><td>${esc(g.black)}</td><td>${esc(g.result)}</td><td>${g.whiteElo || ''}</td><td>${g.blackElo || ''}</td><td>${esc(g.date)}</td><td>${g.moves_count ? Math.ceil(g.moves_count / 2) : ''}</td><td class="first-moves-cell">${esc(g.first_moves.slice(0, 12).join(' '))}</td>`;
+      tr.addEventListener('click', () => loadDatabaseGame(g.id));
+      body.appendChild(tr);
+    });
+
+    const end = Math.min(start + pageRows.length, total);
+    setSummary(`Showing ${start + 1}–${end} of ${total} games from database. Page ${page} / ${totalPages}. Click a row to load the full game.`);
+
+    const prevBtn = document.getElementById('gamesPrevBtn');
+    const nextBtn = document.getElementById('gamesNextBtn');
+    const pageInfo = document.getElementById('gamesPageInfo');
+
+    if (prevBtn) {
+      prevBtn.disabled = page <= 1;
+      prevBtn.onclick = () => { DB.gamesPage = page - 1; renderGamesTable(); };
+    }
+    if (nextBtn) {
+      nextBtn.disabled = page >= totalPages;
+      nextBtn.onclick = () => { DB.gamesPage = page + 1; renderGamesTable(); };
+    }
+    if (pageInfo) pageInfo.textContent = `Page ${page} / ${totalPages}`;
+  }
+
+  function resultCounts(games) {
+    let w = 0, b = 0, d = 0;
+    games.forEach(g => {
+      if (g.result === '1-0') w++;
+      else if (g.result === '0-1') b++;
+      else if (g.result === '1/2-1/2') d++;
+    });
+    return { w, b, d };
+  }
+
+  function legacyRenderStats() {
+    const games = DB.games;
+    const overview = document.getElementById('statsOverview');
+    const results = document.getElementById('statsResults');
+    const yearsEl = document.getElementById('statsYears');
+    const firstMovesEl = document.getElementById('statsFirstMoves');
+    const playersEl = document.getElementById('statsPlayers');
+    if (!games.length) {
+      if (overview) overview.textContent = 'No games loaded.';
+      if (results) results.textContent = '';
+      if (yearsEl) yearsEl.textContent = '';
+      if (firstMovesEl) firstMovesEl.textContent = '';
+      if (playersEl) playersEl.textContent = '';
+      if (typeof updateCharts === 'function') updateCharts({}, 0, 0, 0, 0);
+      return;
+    }
+
+    const rc = resultCounts(games);
+    const years = {};
+    const first = {};
+    const whitePlayers = {};
+    const blackPlayers = {};
+    let sumPly = 0;
+    let minPly = Infinity;
+    let maxPly = 0;
+    games.forEach(g => {
+      const y = String(g.date || '').slice(0, 4);
+      if (/^\d{4}$/.test(y)) years[y] = (years[y] || 0) + 1;
+      const fm = g.first_moves[0];
+      if (fm) first[fm] = (first[fm] || 0) + 1;
+      if (g.white) whitePlayers[g.white] = (whitePlayers[g.white] || 0) + 1;
+      if (g.black) blackPlayers[g.black] = (blackPlayers[g.black] || 0) + 1;
+      sumPly += g.moves_count;
+      minPly = Math.min(minPly, g.moves_count);
+      maxPly = Math.max(maxPly, g.moves_count);
+    });
+
+    const avgMoves = (sumPly / Math.max(games.length, 1) / 2).toFixed(1);
+    const minMoves = isFinite(minPly) ? (minPly / 2).toFixed(1) : '0.0';
+    const maxMoves = (maxPly / 2).toFixed(1);
+    const decisive = rc.w + rc.b;
+    const wScore = ((rc.w + rc.d * 0.5) / games.length * 100).toFixed(1);
+    const bScore = ((rc.b + rc.d * 0.5) / games.length * 100).toFixed(1);
+    const topFirst = Object.entries(first).sort((a,b) => b[1]-a[1]).slice(0,5).map(([m,c]) => `${m} (${c})`).join(', ') || '—';
+    const topW = Object.entries(whitePlayers).sort((a,b) => b[1]-a[1]).slice(0,5).map(([p,c]) => `${p} (${c})`).join(', ') || '—';
+    const topB = Object.entries(blackPlayers).sort((a,b) => b[1]-a[1]).slice(0,5).map(([p,c]) => `${p} (${c})`).join(', ') || '—';
+    const yearText = Object.keys(years).sort().map(y => `${y}: ${years[y]}`).join(', ') || 'No date tags found.';
+
+    overview.innerHTML = `<strong>Total games:</strong> ${games.length}<br><strong>Typical game length:</strong> ~${avgMoves} moves (shortest ${minMoves}, longest ${maxMoves})<br>Decisive games: ${((decisive / games.length) * 100).toFixed(1)}%`;
+    results.innerHTML = `<strong>Results breakdown</strong><br>White wins: ${rc.w} (${(rc.w/games.length*100).toFixed(1)}%), Black wins: ${rc.b} (${(rc.b/games.length*100).toFixed(1)}%), Draws: ${rc.d} (${(rc.d/games.length*100).toFixed(1)}%).<br>White score: ${wScore}% • Black score: ${bScore}%`;
+    yearsEl.innerHTML = `<strong>Activity by year</strong><br>${esc(yearText)}`;
+    firstMovesEl.innerHTML = `<strong>Most common first moves</strong><br>${esc(topFirst)}`;
+    playersEl.innerHTML = `<strong>Main players / opponents</strong><br><em>As White:</em> ${esc(topW)}<br><em>As Black:</em> ${esc(topB)}`;
+    if (typeof updateCharts === 'function') updateCharts(years, rc.w, rc.b, rc.d, games.length);
+  }
+
+  function legacyRenderInsights() {
+    const ratingEl = document.getElementById('insightsRatingAdv');
+    const ecoEl = document.getElementById('insightsECO');
+    const games = DB.games;
+    if (!games.length) { ratingEl.textContent = 'No games loaded.'; ecoEl.textContent = ''; return; }
+    const buckets = { wHi:{w:0,b:0,d:0}, bHi:{w:0,b:0,d:0}, eq:{w:0,b:0,d:0} };
+    const moveMap = new Map(); const ecoMap = new Map();
+    games.forEach(g => {
+      const we = g.whiteElo, be = g.blackElo;
+      const b = !we || !be ? buckets.eq : we > be ? buckets.wHi : be > we ? buckets.bHi : buckets.eq;
+      if (g.result === '1-0') b.w++; else if (g.result === '0-1') b.b++; else if (g.result === '1/2-1/2') b.d++;
+      const fm = g.first_moves[0];
+      if (fm) { if (!moveMap.has(fm)) moveMap.set(fm, {count:0, score:0}); const o = moveMap.get(fm); o.count++; if (g.result === '1-0') o.score += 1; else if (g.result === '1/2-1/2') o.score += .5; }
+      if (g.eco) ecoMap.set(g.eco, (ecoMap.get(g.eco) || 0) + 1);
+    });
+    const scorePct = x => { const t=x.w+x.b+x.d; return t ? ((x.w+.5*x.d)/t*100).toFixed(1) : '—'; };
+    const moveStats = Array.from(moveMap.entries()).map(([m,v]) => ({m, count:v.count, score:v.score/v.count*100})).filter(x=>x.count>=5).sort((a,b)=>b.score-a.score);
+    const best = moveStats[0], worst = moveStats[moveStats.length-1];
+    ratingEl.innerHTML = `<strong>Result by rating advantage</strong><br>White higher: W ${buckets.wHi.w} D ${buckets.wHi.d} B ${buckets.wHi.b} → White score ${scorePct(buckets.wHi)}%<br>Black higher: W ${buckets.bHi.w} D ${buckets.bHi.d} B ${buckets.bHi.b} → White score ${scorePct(buckets.bHi)}%<br>Equal/unknown: W ${buckets.eq.w} D ${buckets.eq.d} B ${buckets.eq.b}<br><br><strong>First move performance</strong><br>Best: ${best ? esc(best.m) + ' (' + best.score.toFixed(1) + '%)' : '—'}<br>Weakest: ${worst ? esc(worst.m) + ' (' + worst.score.toFixed(1) + '%)' : '—'}`;
+    const topEco = Array.from(ecoMap.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([e,c])=>`${e} (${c})`).join(', ');
+    ecoEl.innerHTML = `<strong>Top ECO codes:</strong> ${esc(topEco || 'No ECO tags found.')}`;
+  }
+
+  function renderOpenings() {
+    const body = document.getElementById('openingsTableBody');
+    const summary = document.getElementById('openingsSummary');
+    const stats = document.getElementById('openingsStats');
+    if (!body) return;
+    body.innerHTML = '';
+    if (!DB.games.length) { summary.textContent = 'No openings yet (no games loaded).'; stats.textContent = ''; return; }
+    const select = document.getElementById('openingsPlySelect');
+    const plies = Math.max(1, parseInt(select?.value || '12', 10));
+    const map = new Map();
+    DB.games.forEach(g => {
+      if (g.first_moves.length < plies) return;
+      const arr = g.first_moves.slice(0, plies); const key = arr.join(' ');
+      let o = map.get(key);
+      if (!o) { o = {key, ids:[], w:0,d:0,b:0,wE:0,wN:0,bE:0,bN:0,plies:0}; map.set(key,o); }
+      o.ids.push(g.id);
+      if (g.result === '1-0') o.w++; else if (g.result === '0-1') o.b++; else if (g.result === '1/2-1/2') o.d++;
+      if (g.whiteElo) { o.wE += g.whiteElo; o.wN++; } if (g.blackElo) { o.bE += g.blackElo; o.bN++; }
+      o.plies += g.moves_count;
+    });
+    let rows = Array.from(map.values());
+    const col = window._openingsSortCol || 'games'; const dir = window._openingsSortDir === 'asc' ? 1 : -1;
+    rows.sort((a,b) => {
+      const va = col==='line'?a.key:col==='wWins'?a.w:col==='draws'?a.d:col==='bWins'?a.b:col==='wElo'?(a.wN?a.wE/a.wN:0):col==='bElo'?(a.bN?a.bE/a.bN:0):col==='avgMoves'?(a.plies/a.ids.length):a.ids.length;
+      const vb = col==='line'?b.key:col==='wWins'?b.w:col==='draws'?b.d:col==='bWins'?b.b:col==='wElo'?(b.wN?b.wE/b.wN:0):col==='bElo'?(b.bN?b.bE/b.bN:0):col==='avgMoves'?(b.plies/b.ids.length):b.ids.length;
+      return typeof va==='string' ? va.localeCompare(vb)*dir : (va-vb)*dir;
+    });
+    rows.slice(0,500).forEach((o, idx) => {
+      const total = o.ids.length; const line = o.key.split(' ').map((m,i)=>(i%2===0?`${Math.floor(i/2)+1}. `:'')+m).join(' ');
+      const tr = document.createElement('tr'); tr.dataset.openingIds = o.ids.join(',');
+      tr.innerHTML = `<td>${idx+1}</td><td>${esc(line)}</td><td>${total}</td><td>${o.w}</td><td>${o.d}</td><td>${o.b}</td><td>${(o.w/total*100).toFixed(1)}</td><td>${(o.d/total*100).toFixed(1)}</td><td>${(o.b/total*100).toFixed(1)}</td><td>${o.wN?Math.round(o.wE/o.wN):'—'}</td><td>${o.bN?Math.round(o.bE/o.bN):'—'}</td><td>${(o.plies/total/2).toFixed(1)}</td>`;
+      tr.addEventListener('click', () => {
+        document.querySelectorAll('tr.openings-row-selected').forEach(el => el.classList.remove('openings-row-selected'));
+        tr.classList.add('openings-row-selected');
+        const moves = o.key.split(' ').filter(Boolean);
+        window._LINE_MOVES_SAN = moves;
+        window._CURRENT_PLY = moves.length;
+        window._LINE_SOURCE = 'opening-list';
+        if (typeof unfreezeCurrentLine === 'function') unfreezeCurrentLine();
+        window.batchAutoFollow = true;
+        updateBoardFromLine();
+        window._SELECTED_OPENING_LINE = o.key;
+        const copy = document.getElementById('copyOpeningLineBtn'); if (copy) copy.disabled = false;
+      });
+      body.appendChild(tr);
+    });
+    summary.textContent = `${rows.length} opening lines at ${plies} plies.`;
+    stats.textContent = `Database-backed grouping from ${DB.games.length} games.`;
+  }
+
+  async function loadDatabaseGame(gameId, stopAtPly) {
+    try {
+      const res = await fetch(`/api/game/${encodeURIComponent(gameId)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const moves = Array.isArray(data.moves) ? data.moves.map(m => m.san).filter(Boolean) : [];
+      if (stopAtPly) moves.splice(stopAtPly);
+      window._LINE_MOVES_SAN = moves;
+      window._CURRENT_PLY = moves.length;
+      window._LINE_SOURCE = 'game-db';
+      window._DB_CURRENT_GAME_ID = Number(gameId);
+      window._DB_CURRENT_GAME = data;
+      window._CURRENT_NODE = window._CURRENT_NODE || window._TREE;
+      if (typeof unfreezeCurrentLine === 'function') unfreezeCurrentLine();
+      window.batchAutoFollow = true;
+      await updateBoardFromLine();
+      document.querySelectorAll('tr.games-row-selected').forEach(el => el.classList.remove('games-row-selected'));
+      const row = document.querySelector(`tr[data-game-id="${CSS.escape(String(gameId))}"]`);
+      if (row) row.classList.add('games-row-selected');
+    } catch (e) {
+      console.error('Database game load failed:', e);
+      const el = document.getElementById('gamesSummary'); if (el) el.textContent = `Game load failed: ${e.message}`;
+    }
+  }
+  window.loadDatabaseGame = loadDatabaseGame;
+
+  async function renderDatabaseNodeDetailsForFen(fen, node) {
+    const req = ++DB.requestId;
+    const details = document.getElementById('nodeDetails');
+    const list = document.getElementById('nodeGameList');
+    const bucketsRoot = document.getElementById('nodeResultBuckets');
+    const sample = document.getElementById('sampleGames');
+    if (!details || !list || !bucketsRoot) return;
+    details.innerHTML = '<div class="small-muted">Loading database node details…</div>';
+    try {
+      const res = await fetch('/api/node_games?fen=' + encodeURIComponent(fen));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (req !== DB.requestId) return;
+      const path = node ? getPathFromNode(node) : [];
+      const count = Number(data.count || 0);
+      const w = Number(data.white_wins || 0), b = Number(data.black_wins || 0), d = Number(data.draws || 0);
+      const fenText = data.fen || fen;
+      details.innerHTML = `<div class="small-muted"><strong>${node?.move ? `Move: ${esc(node.move)}` : 'Position'}</strong></div><div class="small-muted">Games reaching this node: <strong>${count}</strong></div><div class="small-muted">White score: ${count ? ((w + .5*d)/count*100).toFixed(1) : '0.0'}% • Black score: ${count ? ((b + .5*d)/count*100).toFixed(1) : '0.0'}%</div><div class="small-muted" style="margin-top:4px;">Line: ${esc(path.join(' ')) || 'Start position'}</div><div class="small-muted" style="margin-top:4px;">FEN: ${esc(fenText)}</div>`;
+      list.innerHTML = '';
+      const games = Array.isArray(data.games) ? data.games : [];
+      const summary = document.createElement('div'); summary.className = 'small-muted'; summary.textContent = `Games in this node: ${count}`; list.appendChild(summary);
+      const sub = document.createElement('div');
+      games.forEach((g, i) => { const e = document.createElement('div'); e.className = 'node-game-entry'; e.textContent = `${i+1}. #${g.id} ${g.white} vs ${g.black} (${g.result})`; e.addEventListener('click', () => loadDatabaseGame(g.id)); sub.appendChild(e); });
+      if (games.length < count) { const more = document.createElement('div'); more.className='small-muted'; more.textContent=`+ ${count-games.length} more…`; sub.appendChild(more); }
+      list.appendChild(sub);
+
+      bucketsRoot.innerHTML = '<div class="node-results-wrapper"><div class="node-results-title">Games by result at this node</div><div class="node-results-buckets">' +
+        `<div class="node-results-column"><h4>White wins</h4><div class="small-muted">${w}</div></div>` +
+        `<div class="node-results-column"><h4>Black wins</h4><div class="small-muted">${b}</div></div>` +
+        `<div class="node-results-column"><h4>Draws</h4><div class="small-muted">${d}</div></div></div></div>`;
+      if (sample) sample.value = (data.sample_pgns || []).join('\n\n---\n\n');
+    } catch (e) {
+      if (req === DB.requestId) {
+        details.innerHTML = `<div class="small-muted">Node details unavailable: ${esc(e.message)}</div>`;
+        list.textContent = '';
+        bucketsRoot.textContent = '';
+      }
+    }
+  }
+  window.renderDatabaseNodeDetailsForFen = renderDatabaseNodeDetailsForFen;
+
+  window.renderDatabaseNodeDetails = async function(node) {
+    const fen = node ? stateToFEN(stateFromNode(node)) : (window._CURRENT_STATE ? stateToFEN(window._CURRENT_STATE) : '');
+    return renderDatabaseNodeDetailsForFen(fen, node);
+  };
+
+
+  async function loadStatsDashboard() {
+    try {
+      const res = await fetch('/api/stats/dashboard');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      DB.dashboard = data;
+      renderStatsDashboard(data);
+      renderDashboardCharts(data);
+    } catch (e) {
+      const overview = document.getElementById('statsOverview');
+      if (overview) overview.innerHTML = `<div class="small-muted">Stats dashboard failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function scorePct(w, d, g) {
+    return g ? ((w + d * 0.5) / g * 100).toFixed(1) : '0.0';
+  }
+
+  function renderStatsDashboard(d) {
+    const ov = d.overview;
+    const r = d.results.overall;
+    const dq = d.data_quality;
+
+    const overview = document.getElementById('statsOverview');
+    if (overview) {
+      overview.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:8px;">
+          <div><strong>${ov.total_games}</strong><br><span class="small-muted">Total games</span></div>
+          <div><strong>${ov.games_with_actual_moves}</strong><br><span class="small-muted">Games with moves</span></div>
+          <div><strong>${ov.zero_move_games}</strong><br><span class="small-muted">Zero-move games</span></div>
+          <div><strong>${ov.decisive_games}</strong><br><span class="small-muted">Decisive games</span></div>
+          <div><strong>${ov.draws}</strong><br><span class="small-muted">Draws</span></div>
+          <div><strong>${ov.average_moves}</strong><br><span class="small-muted">Avg moves</span></div>
+          <div><strong>${ov.median_moves}</strong><br><span class="small-muted">Median moves</span></div>
+          <div><strong>${ov.min_moves}–${ov.max_moves}</strong><br><span class="small-muted">Range</span></div>
+          <div><strong>${ov.years.min}–${ov.years.max}</strong><br><span class="small-muted">Years</span></div>
+          <div><strong>${ov.unique_player_names}</strong><br><span class="small-muted">Unique player names</span></div>
+        </div>`;
+    }
+
+    const results = document.getElementById('statsResults');
+    if (results) {
+      results.innerHTML = `
+        <strong>Results</strong><br>
+        White wins: <strong>${r.white_wins}</strong> (${(r.white_wins / ov.total_games * 100).toFixed(1)}%)<br>
+        Black wins: <strong>${r.black_wins}</strong> (${(r.black_wins / ov.total_games * 100).toFixed(1)}%)<br>
+        Draws: <strong>${r.draws}</strong> (${(r.draws / ov.total_games * 100).toFixed(1)}%)<br>
+        Unknown: <strong>${r.unknown}</strong><br>
+        White score: <strong>${r.white_score}%</strong>`;
+    }
+
+    const yearsEl = document.getElementById('statsYears');
+    if (yearsEl) {
+      const years = d.activity.by_year;
+      const latestMonths = d.activity.by_month.slice(-12);
+      const season = d.activity.seasonality_by_month;
+      const week = d.activity.by_weekday;
+      yearsEl.innerHTML = `
+        <strong>Activity by year</strong><br>${years.map(y => `${y.year}: ${y.games}`).join(' • ')}<br><br>
+        <strong>Last 12 months</strong><br>${latestMonths.map(m => `${m.month}: ${m.games}`).join(' • ')}<br><br>
+        <strong>Seasonality by month</strong><br>${season.map(m => `${m.month}: ${m.games}`).join(' • ')}<br><br>
+        <strong>By weekday</strong><br>${week.map(w => `${w.weekday}: ${w.games}`).join(' • ')}`;
+    }
+
+    const lengthEl = document.getElementById('statsGameLength');
+    if (lengthEl) {
+      const p = d.game_length.percentiles;
+      const dist = d.game_length.distribution;
+      lengthEl.innerHTML = `
+        <strong>Game length</strong><br>
+        Average ${ov.average_moves} • Median ${ov.median_moves} • P25 ${p.p25} • P75 ${p.p75} • P90 ${p.p90} • P95 ${p.p95}<br><br>
+        <table class="ply-analysis-table">
+          <thead><tr><th>Length</th><th>Games</th><th>White wins</th><th>Draws</th><th>Black wins</th><th>White score</th></tr></thead>
+          <tbody>${dist.map(x => `<tr><td>${x.bucket}</td><td>${x.games}</td><td>${x.white_wins}</td><td>${x.draws}</td><td>${x.black_wins}</td><td>${scorePct(x.white_wins, x.draws, x.games)}%</td></tr>`).join('')}</tbody>
+        </table>`;
+    }
+
+    const firstMovesEl = document.getElementById('statsFirstMoves');
+    if (firstMovesEl) {
+      const items = d.first_moves.items.slice(0, 10);
+      firstMovesEl.innerHTML = `
+        <strong>First moves</strong><br>
+        <em>Minimum games shown: ${d.first_moves.minimum_games}</em><br><br>
+        <table class="ply-analysis-table">
+          <thead><tr><th>Move</th><th>Games</th><th>White wins</th><th>Draws</th><th>Black wins</th><th>White score</th></tr></thead>
+          <tbody>${items.map(x => `<tr><td>${esc(x.move)}</td><td>${x.games}</td><td>${x.white_wins}</td><td>${x.draws}</td><td>${x.black_wins}</td><td>${scorePct(x.white_wins, x.draws, x.games)}%</td></tr>`).join('')}</tbody>
+        </table>`;
+    }
+
+    const playersEl = document.getElementById('statsPlayers');
+    if (playersEl) {
+      const players = d.players.most_frequent_names.slice(0, 10);
+      playersEl.innerHTML = `
+        <strong>Top player names</strong><br>${players.map(p => `${esc(p.player)} (${p.games})`).join(' • ') || '—'}<br><br>
+        <strong>Unique player names</strong>: ${d.players.unique_player_names}`;
+    }
+
+    const provenanceEl = document.getElementById('statsProvenance');
+    if (provenanceEl) {
+      const sources = d.provenance.by_source;
+      const plat = d.provenance.platform_id_coverage;
+      provenanceEl.innerHTML = `
+        <strong>Provenance</strong><br>
+        ${sources.map(s => `${esc(s.source)}: ${s.games} (platform ID ${s.with_platform_id})`).join(' • ')}<br><br>
+        Platform ID coverage: <strong>${plat.with_platform_id}</strong> with, <strong>${plat.without_platform_id}</strong> without<br>
+        Source username NULL: <strong>${d.provenance.source_username_null_count}</strong>`;
+    }
+
+    const ratingEl = document.getElementById('insightsRatingAdv');
+    if (ratingEl) {
+      const adv = d.rating.broad_advantage;
+      ratingEl.innerHTML = `
+        <strong>Rating advantage</strong><br>
+        White higher: W ${adv.white_higher.white_wins} D ${adv.white_higher.draws} B ${adv.white_higher.black_wins} → White score ${scorePct(adv.white_higher.white_wins, adv.white_higher.draws, adv.white_higher.white_wins + adv.white_higher.draws + adv.white_higher.black_wins)}%<br>
+        Black higher: W ${adv.black_higher.white_wins} D ${adv.black_higher.draws} B ${adv.black_higher.black_wins} → White score ${scorePct(adv.black_higher.white_wins, adv.black_higher.draws, adv.black_higher.white_wins + adv.black_higher.draws + adv.black_higher.black_wins)}%<br>
+        Equal/unknown: W ${adv.equal_unknown.white_wins} D ${adv.equal_unknown.draws} B ${adv.equal_unknown.black_wins}`;
+    }
+
+    const generatedEl = document.getElementById('insightsGenerated');
+    if (generatedEl) {
+      const insights = [];
+      insights.push(`Dataset has ${ov.total_games} games across ${ov.years.min}–${ov.years.max}.`);
+      insights.push(`${ov.games_with_actual_moves} games have actual moves; ${ov.zero_move_games} are zero-move games.`);
+      insights.push(`White score overall is ${r.white_score}%.`);
+      if (dq.source_username_null_count > 0) insights.push(`Source username is NULL for ${dq.source_username_null_count} games.`);
+      if (dq.missing_opening > 0) insights.push(`Opening name is missing for ${dq.missing_opening} games.`);
+      if (dq.missing_eco > 0) insights.push(`ECO code is missing for ${dq.missing_eco} games.`);
+      if (dq.missing_black_elo > 0) insights.push(`Black Elo is missing for ${dq.missing_black_elo} game(s).`);
+
+      generatedEl.innerHTML = `
+        <strong>Generated insights</strong><br>
+        <ul>${insights.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+    }
+
+    const dqEl = document.getElementById('insightsDataQuality');
+    if (dqEl) {
+      dqEl.innerHTML = `
+        <strong>Data quality</strong><br>
+        Missing date: ${dq.missing_date}<br>
+        Missing White Elo: ${dq.missing_white_elo}<br>
+        Missing Black Elo: ${dq.missing_black_elo}<br>
+        Missing ECO: ${dq.missing_eco}<br>
+        Missing opening: ${dq.missing_opening}<br>
+        Missing termination: ${dq.missing_termination}<br>
+        Missing time control: ${dq.missing_time_control}<br>
+        Missing platform ID: ${dq.missing_platform_id}<br>
+        Source username NULL: ${dq.source_username_null_count}<br>
+        Unknown result: ${dq.unknown_result_count}`;
+    }
+
+    const ecoEl = document.getElementById('insightsECO');
+    if (ecoEl) {
+      const ecoTop = d.eco.top.slice(0, 8).map(e => `${esc(e.eco)} (${e.games})`).join(', ');
+      ecoEl.innerHTML = `<strong>Top ECO codes</strong><br>${ecoTop || 'No ECO tags found.'}`;
+    }
+  }
+
+  function renderDashboardCharts(d) {
+    const yearSvg = document.getElementById('chartYears');
+    const resultSvg = document.getElementById('chartResults');
+    const emptyEl = document.getElementById('chartsEmpty');
+    if (!yearSvg || !resultSvg) return;
+
+    if (emptyEl) emptyEl.style.display = 'none';
+    yearSvg.style.display = 'block';
+    resultSvg.style.display = 'block';
+    yearSvg.innerHTML = '';
+    resultSvg.innerHTML = '';
+
+    const w = 600;
+    const h = 220;
+    const padLeft = 42;
+    const padRight = 14;
+    const padTop = 18;
+    const padBottom = 40;
+
+    const years = d.activity.by_year;
+    const maxGames = Math.max(...years.map(y => y.games), 1);
+    const plotW = w - padLeft - padRight;
+    const plotH = h - padTop - padBottom;
+    const slotW = plotW / Math.max(years.length, 1);
+    const barW = Math.max(2, Math.min(30, slotW * 0.68));
+    yearSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    let yearHtml = '';
+    years.forEach((y, i) => {
+      const bh = (y.games / maxGames) * plotH;
+      const centerX = padLeft + (i + 0.5) * slotW;
+      const x = centerX - barW / 2;
+      const yPos = padTop + plotH - bh;
+      yearHtml += `<rect x="${x}" y="${yPos}" width="${barW}" height="${Math.max(bh, 0.5)}" rx="1" fill="#3b82f6"><title>${y.year}: ${y.games}</title></rect>`;
+      yearHtml += `<text x="${centerX}" y="${padTop + plotH + 15}" text-anchor="middle" fill="#d1d5db" font-size="10" transform="rotate(-35 ${centerX} ${padTop + plotH + 15})">${y.year}</text>`;
+      yearHtml += `<text x="${centerX}" y="${Math.max(yPos - 5, 8)}" text-anchor="middle" fill="#f9fafb" font-size="10">${y.games}</text>`;
+    });
+    yearSvg.innerHTML = yearHtml;
+
+    const rc = d.results.overall;
+    const total = d.overview.total_games || 1;
+    const resultData = [
+      ['White wins', rc.white_wins, '#22c55e'],
+      ['Draws', rc.draws, '#eab308'],
+      ['Black wins', rc.black_wins, '#ef4444'],
+    ];
+    const labelW = 90;
+    const rowH = 26;
+    resultSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    let resultHtml = '';
+    resultData.forEach((item, i) => {
+      const [label, value, color] = item;
+      const yPos = padTop + i * (rowH + 14);
+      const barStart = padLeft + labelW;
+      const maxBarW = w - barStart - padRight;
+      const bw = (value / total) * maxBarW;
+      resultHtml += `<text x="${padLeft}" y="${yPos + rowH - 8}" fill="#e5e7eb" font-size="12">${label}</text>`;
+      resultHtml += `<rect x="${barStart}" y="${yPos}" width="${Math.max(bw, 0.5)}" height="${rowH}" rx="2" fill="${color}"></rect>`;
+      resultHtml += `<text x="${barStart + Math.max(bw, 0.5) + 6}" y="${yPos + rowH - 8}" fill="#f9fafb" font-size="12">${value} (${(value / total * 100).toFixed(1)}%)</text>`;
+    });
+    resultSvg.innerHTML = resultHtml;
+  }
+
+
+  async function loadDatabaseDashboard() {
+    try {
+      const res = await fetch('/api/database_games');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const games = (data.games || []).map(gameFromRow);
+      DB.games.length = 0; DB.games.push(...games);
+      DB.byId.clear(); games.forEach(g => DB.byId.set(g.id, g));
+      window._DB_GAMES = DB.games;
+      window._DB_GAME_BY_ID = DB.byId;
+      DB.loaded = true;
+      window._DB_LOADED = true;
+      renderGamesTable(); await loadStatsDashboard(); renderOpenings();
+      if (typeof updatePlyAnalysis === 'function') updatePlyAnalysis();
+      const sourceEl = document.getElementById('gamesSummary');
+      if (sourceEl) sourceEl.dataset.source = 'database';
+      if (window._CURRENT_NODE) renderDatabaseNodeDetails(window._CURRENT_NODE);
+    } catch (e) {
+      console.error('Database dashboard load failed:', e);
+      setSummary(`Database dashboard failed: ${e.message}`);
+    }
+  }
+  window.loadDatabaseDashboard = loadDatabaseDashboard;
+
+  // Board.js functions delegate here when database mode is active.
+  const oldRebuild = window.rebuildGamesTable;
+  window.rebuildGamesTable = function () {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) return renderGamesTable();
+    return oldRebuild ? oldRebuild() : undefined;
+  };
+  const oldStats = window.updateStats;
+  window.updateStats = function () {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) {
+      if (DB.dashboard) renderStatsDashboard(DB.dashboard);
+      return;
+    }
+    return oldStats ? oldStats() : undefined;
+  };
+  const oldInsights = window.updateInsights;
+  window.updateInsights = function () {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) {
+      if (DB.dashboard) renderStatsDashboard(DB.dashboard);
+      return;
+    }
+    return oldInsights ? oldInsights() : undefined;
+  };
+  const oldOpenings = window.updateOpeningsList;
+  window.updateOpeningsList = function () {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) return renderOpenings();
+    return oldOpenings ? oldOpenings() : undefined;
+  };
+  const oldNodeDetails = window.renderNodeDetails;
+  window.renderNodeDetails = function (node) {
+    if (window._DATA_SOURCE === 'database' && DB.loaded) {
+      if (!node) {
+        const details = document.getElementById('nodeDetails');
+        if (details) details.innerHTML = '<div class="small-muted">Position not found in your repertoire tree.</div>';
+        const list = document.getElementById('nodeGameList');
+        if (list) list.textContent = 'Games in this node will appear here.';
+        const buckets = document.getElementById('nodeResultBuckets');
+        if (buckets) buckets.innerHTML = '';
+        const sample = document.getElementById('sampleGames');
+        if (sample) sample.value = '';
+        return;
+      }
+      return renderDatabaseNodeDetails(node);
+    }
+    return oldNodeDetails ? oldNodeDetails(node) : undefined;
+  };
+
+  function wireImportButtons() {
+    async function runImport(source) {
+      const username = (document.getElementById('import-username')?.value || '').trim();
+      const status = document.getElementById('import-status');
+      if (!username) { if (status) status.textContent = '⚠️ Please enter a username.'; return; }
+      if (status) status.textContent = `⏳ Downloading and importing ${source} games for ${username}…`;
+      try {
+        const res = await fetch('/api/import_games', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({source, username}) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        if (status) status.textContent = `✅ ${data.message || 'Import complete.'}`;
+        await loadDatabaseDashboard();
+        if (typeof initDatabaseRepertoire === 'function') await initDatabaseRepertoire();
+      } catch (e) {
+        if (status) status.textContent = `❌ ${e.message}`;
+      }
+    }
+    document.getElementById('import-lichess')?.addEventListener('click', () => runImport('lichess'));
+    document.getElementById('import-chesscom')?.addEventListener('click', () => runImport('chesscom'));
+  }
+
+  const syncInFlight = { lichess: false, chesscom: false };
+
+  const syncJobIds = { lichess: null, chesscom: null };
+  const syncPollTimers = { lichess: null, chesscom: null };
+
+  function wireSyncButtons() {
+    async function runSync(source) {
+      const username = (document.getElementById('import-username')?.value || '').trim();
+      const statusEl = document.getElementById(`sync-status-${source}`);
+      const btn = document.getElementById(`sync-${source}`);
+      const cancelBtn = document.getElementById(`cancel-${source}`);
+
+      if (!username) {
+        if (statusEl) statusEl.textContent = '⚠️ Please enter a username.';
+        return;
+      }
+
+      if (syncInFlight[source]) return;
+      syncInFlight[source] = true;
+      if (btn) btn.disabled = true;
+      if (cancelBtn) cancelBtn.disabled = false;
+      if (statusEl) statusEl.textContent = `⏳ Starting ${source} sync for ${username}…`;
+
+      try {
+        const startRes = await fetch('/api/sync/start', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({source, username})
+        });
+        const startData = await startRes.json();
+
+        if (startRes.status === 409 && startData.job_id) {
+          syncJobIds[source] = startData.job_id;
+          if (statusEl) statusEl.textContent = `⚠️ ${source}: already running as job ${startData.job_id}.`;
+        } else if (!startRes.ok) {
+          throw new Error(startData.error || `HTTP ${startRes.status}`);
+        } else {
+          syncJobIds[source] = startData.job_id;
+          if (statusEl) statusEl.textContent = `⏳ ${source} job ${startData.job_id} started…`;
+        }
+
+        await pollSyncJob(source, syncJobIds[source], statusEl);
+      } catch (e) {
+        if (statusEl) statusEl.textContent = `❌ ${e.message}`;
+      } finally {
+        syncInFlight[source] = false;
+        if (btn) btn.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = true;
+        await refreshSyncState();
+        await loadDatabaseDashboard();
+        if (typeof initDatabaseRepertoire === 'function') await initDatabaseRepertoire();
+      }
+    }
+
+    async function pollSyncJob(source, jobId, statusEl) {
+      clearInterval(syncPollTimers[source]);
+
+      return new Promise((resolve) => {
+        syncPollTimers[source] = setInterval(async () => {
+          try {
+            const res = await fetch(`/api/sync/status?job_id=${encodeURIComponent(jobId)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+            const job = data.job || {};
+            const phase = job.phase || 'working';
+            if (statusEl) {
+              statusEl.textContent =
+                `${source}: ${job.status} • ${phase} • ` +
+                `dl ${job.downloaded_count || 0} • ` +
+                `parsed ${job.parsed_count || 0} • ` +
+                `new ${job.imported_count || 0} • ` +
+                `dup ${job.duplicate_count || 0}`;
+            }
+
+            if (['completed', 'failed', 'canceled', 'interrupted'].includes(job.status)) {
+              clearInterval(syncPollTimers[source]);
+              if (statusEl) {
+                if (job.status === 'completed') {
+                  statusEl.textContent =
+                    `✅ ${source}: ${job.imported_count || 0} new, ` +
+                    `${job.duplicate_count || 0} duplicates, ` +
+                    `tree ${job.tree_rebuilt ? 'rebuilt' : 'unchanged'}`;
+                } else {
+                  statusEl.textContent =
+                    `❌ ${source} ${job.status}: ${job.error || job.last_error || ''}`;
+                }
+              }
+              resolve();
+            }
+          } catch (e) {
+            clearInterval(syncPollTimers[source]);
+            if (statusEl) statusEl.textContent = `❌ Sync status error: ${e.message}`;
+            resolve();
+          }
+        }, 2000);
+      });
+    }
+
+    async function cancelSync(source) {
+      const jobId = syncJobIds[source];
+      const statusEl = document.getElementById(`sync-status-${source}`);
+      const cancelBtn = document.getElementById(`cancel-${source}`);
+
+      if (!jobId) {
+        if (statusEl) statusEl.textContent = `⚠️ No active ${source} job.`;
+        return;
+      }
+
+      if (cancelBtn) cancelBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/sync/cancel', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({job_id: jobId})
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        if (statusEl) statusEl.textContent = `⏹ ${source}: cancel requested.`;
+      } catch (e) {
+        if (statusEl) statusEl.textContent = `❌ Cancel failed: ${e.message}`;
+        if (cancelBtn) cancelBtn.disabled = false;
+      }
+    }
+
+    document.getElementById('sync-lichess')?.addEventListener('click', () => runSync('lichess'));
+    document.getElementById('sync-chesscom')?.addEventListener('click', () => runSync('chesscom'));
+    document.getElementById('cancel-lichess')?.addEventListener('click', () => cancelSync('lichess'));
+    document.getElementById('cancel-chesscom')?.addEventListener('click', () => cancelSync('chesscom'));
+  }
+
+  let syncStateRefreshTimer = null;
+
+  async function refreshSyncState() {
+    const username = (document.getElementById('import-username')?.value || '').trim();
+
+    if (!username) {
+      for (const source of ['lichess', 'chesscom']) {
+        const stateEl = document.getElementById(`sync-state-${source}`);
+        if (stateEl) stateEl.textContent = `${source}: Last sync Never • Imported today — • Tree clean`;
+      }
+      return;
+    }
+
+    for (const source of ['lichess', 'chesscom']) {
+      const stateEl = document.getElementById(`sync-state-${source}`);
+      if (!stateEl) continue;
+
+      try {
+        const res = await fetch(`/api/sync_state?source=${source}&username=${encodeURIComponent(username)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+        const st = data.state || {};
+        const last = st.last_successful_sync_at
+          ? new Date(st.last_successful_sync_at).toLocaleString()
+          : 'Never';
+        const tree = st.tree_dirty ? 'dirty' : 'clean';
+        const importedToday = data.today_imported || 0;
+
+        stateEl.textContent = `${source}: Last sync ${last} • Imported today ${importedToday} • Tree ${tree}`;
+      } catch (e) {
+        stateEl.textContent = `${source}: sync state unavailable`;
+      }
+    }
+  }
+
+  function wireCopyOpening() {
+    document.getElementById('copyOpeningLineBtn')?.addEventListener('click', () => {
+      const text = window._SELECTED_OPENING_LINE || '';
+      if (!text) return;
+      const formatted = text.split(' ').map((m,i)=>(i%2===0?`${Math.floor(i/2)+1}. `:'')+m).join(' ');
+      navigator.clipboard?.writeText(formatted).then(() => {
+        const btn = document.getElementById('copyOpeningLineBtn');
+        if (btn) { const old=btn.textContent; btn.textContent='Copied ✓'; setTimeout(()=>btn.textContent=old,900); }
+      }).catch(() => prompt('Opening line:', formatted));
+    });
+  }
+
+  function wireDatabaseNavigationGuards() {
+    // DB navigation synchronization is now handled by board.js updateBoardFromLine().
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    wireImportButtons();
+    wireSyncButtons();
+    wireCopyOpening();
+    wireDatabaseNavigationGuards();
+
+    const usernameInput = document.getElementById('import-username');
+    if (usernameInput) {
+      usernameInput.addEventListener('input', () => {
+        clearTimeout(syncStateRefreshTimer);
+        syncStateRefreshTimer = setTimeout(refreshSyncState, 400);
+      });
+    }
+
+    refreshSyncState();
+
+    // Give board.js a moment to initialize its tree, then fill all database panels.
+    setTimeout(loadDatabaseDashboard, 0);
+  });
+})();

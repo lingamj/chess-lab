@@ -1,0 +1,159 @@
+# Chess AI — Audit Status
+**Phase:** Phase-0 Static Defect Resolution
+**Status:** Static remediation completed; runtime verification pending
+**Recorded:** 2026-08-09
+
+## Phase-0 Completion
+The confirmed Phase-0 defects B-020 through B-034 have been applied.
+
+### Defects Resolved
+- **B-020** — `board.py`: repetition count restored during `undo_move`
+- **B-021** — `web_control.py`: inverted checkmate result corrected
+- **B-022** — model path unified to `chess_nn.pkl`
+- **B-023** — shared engine analysis protected with an engine lock
+- **B-024** — SSE queue bounded
+- **B-025** — human batch polling uses `current_fen`
+- **B-026** — aspiration-search timeout retains the last valid score
+- **B-027** — `stop_event` initialized and cleared appropriately
+- **B-028** — themed training data unpacking corrected
+- **B-029** — MCTS selection sign corrected
+- **B-030** — `nn.train()` accepts integer or one-hot policy targets
+- **B-031** — `fen_queue` bounded
+- **B-032** — infinite-search handling corrected
+- **B-033** — Stockfish analysis error handling corrected
+- **B-034** — background game-thread exception handlers added
+- **B-035** — `search.py`: missing `import threading` – added during runtime verification
+
+## Static Verification
+| File | Result |
+|---|---|
+| `board.py` | PASS |
+| `web_control.py` | PASS |
+| `search.py` | PASS |
+| `uci_engine.py` | PASS |
+| `nn.py` | PASS |
+
+## B-034 Transactional Verification
+| Check | Result |
+|---|---|
+| Original structure verified | PASS |
+| Candidate constructed in memory | PASS |
+| Candidate compilation | PASS |
+| Backup created | PASS |
+| Actual file compilation | PASS |
+| `run_test_batch` try/except | PASS |
+| `run_human_game` try/except | PASS |
+| `/api/analyze` boundary preserved | PASS |
+| Final external `py_compile` | PASS |
+
+## Runtime Verification
+| Test | Status |
+|---|---|
+| Flask restart | PASS    |
+| RV-01 | PASS    |
+| RV-02 | PASS    |
+| RV-03 | PASS    |
+| RV-04 | PASS    |
+| RV-05 | PASS    |
+| RV-06 | PASS    |
+| RV-07 | PASS    |
+| RV-08 | PASS    |
+
+## Current Baseline
+**Static code remediation:** COMPLETE
+**Python syntax verification:** COMPLETE
+**Runtime verification:** COMPLETE
+
+============================================================
+ PRESERVED CONTENT: Original root-level AUDIT_STATUS.md content preserved
+============================================================
+
+# Chess AI — Audit Status
+**Phase:** Phase-0 Static Defect Resolution
+**Status:** Static remediation completed; runtime verification pending
+**Recorded:** 2026-08-09
+
+## Phase-0 Completion
+The confirmed Phase-0 defects B-020 through B-034 have been applied.
+
+### Defects Resolved
+- **B-020** — `board.py`: repetition count restored during `undo_move`
+- **B-021** — `web_control.py`: inverted checkmate result corrected
+- **B-022** — model path unified to `chess_nn.pkl`
+- **B-023** — shared engine analysis protected with an engine lock
+- **B-024** — SSE queue bounded
+- **B-025** — human batch polling uses `current_fen`
+- **B-026** — aspiration-search timeout retains the last valid score
+- **B-027** — `stop_event` initialized and cleared appropriately
+- **B-028** — themed training data unpacking corrected
+- **B-029** — MCTS selection sign corrected
+- **B-030** — `nn.train()` accepts integer or one-hot policy targets
+- **B-031** — `fen_queue` bounded
+- **B-032** — infinite-search handling corrected
+- **B-033** — Stockfish analysis error handling corrected
+- **B-034** — background game-thread exception handlers added
+- **B-035** — `search.py`: missing `import threading` – added during runtime verification
+
+## Static Verification
+The following files passed Python syntax compilation after the Phase-0 fixes:
+
+| File | Result |
+|---|---|
+| `board.py` | PASS |
+| `web_control.py` | PASS |
+| `search.py` | PASS |
+| `uci_engine.py` | PASS |
+| `nn.py` | PASS |
+
+## B-034 Transactional Verification
+B-034 was applied using a transactional candidate-build procedure.
+
+| Check | Result |
+|---|---|
+| Original structure verified | PASS |
+| Candidate constructed in memory | PASS |
+| Candidate compilation | PASS |
+| Backup created | PASS |
+| Actual file compilation | PASS |
+| `run_test_batch` try/except | PASS |
+| `run_human_game` try/except | PASS |
+| `/api/analyze` boundary preserved | PASS |
+| Final external `py_compile` | PASS |
+
+## Runtime Verification
+
+| Test | Status |
+|---|---|
+| Flask restart | PASS    |
+| RV-01 | PASS    |
+| RV-02 | PASS    |
+| RV-03 | PASS    |
+| RV-04 | PASS    |
+| RV-05 | PASS    |
+| RV-06 | PASS    |
+| RV-07 | PASS    |
+| RV-08 | PASS    |
+
+## Current Baseline
+The current state is therefore:
+
+**Static code remediation:** COMPLETE
+**Python syntax verification:** COMPLETE
+**Runtime verification:** COMPLETE
+
+No runtime result should be considered validated until RV-01 through RV-08 are executed and reviewed.
+
+
+---
+
+## 2026-08-23 Production Update
+
+- schema_version: 5
+- games: 14,916
+- game_moves: 1,031,269
+- import_batches: 67
+- import_records: 23,496
+- sync_jobs: 2
+- source_username NULL: 0
+- canonical identity: jothi
+- tree_dirty: 0 for both sources

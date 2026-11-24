@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chess Study – Live & Batch Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
+      color: #e5e7eb; padding: 16px;
+    }
+    header { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+    h1 { font-size: 18px; font-weight: 600; color: #e5e7eb; }
+    .meta { font-size: 12px; color: #9ca3af; }
+
+    .top-board-panel,
+    .main-column { max-width: 960px; margin: 0 auto; }
+    .top-board-panel { margin-bottom: 14px; }
+    .main-column { display: flex; flex-direction: column; gap: 12px; }
+
+    .panel {
+      background: rgba(15,23,42,0.9);
+      border-radius: 12px;
+      padding: 10px;
+      border: 1px solid rgba(148,163,184,0.25);
+      box-shadow: 0 10px 30px rgba(15,23,42,.7);
+    }
+
+    label.small { font-size: 12px; color: #9ca3af; margin-bottom: 4px; display: block; }
+    .small-muted { font-size: 12px; color: #9ca3af; }
+    .poetic { font-style: italic; color: #9ca3af; }
+
+    input[type=file], input[type=number], input[type=text], textarea, select {
+      background: #020617;
+      border-radius: 8px;
+      border: 1px solid rgba(148,163,184,0.4);
+      padding: 6px 8px;
+      color: inherit;
+      font-size: 13px;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #22d3ee;
+      box-shadow: 0 0 0 1px rgba(34,211,238,0.8);
+    }
+    input[type="checkbox"] { width: 16px; height: 16px; accent-color: #22c55e; margin-right: 4px; }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 5px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      background: linear-gradient(135deg,#22c55e,#14b8a6);
+      color: #022c22;
+      font-weight: 600;
+      box-shadow: 0 4px 10px rgba(34,197,94,0.4);
+      white-space: nowrap;
+    }
+    button.secondary {
+      background: transparent;
+      color: #e5e7eb;
+      border: 1px solid rgba(148,163,184,0.6);
+      box-shadow: none;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:active { transform: translateY(1px); box-shadow: none; }
+
+    hr { border: none; border-top: 1px solid rgba(148,163,184,0.25); margin: 8px 0; }
+
+    /* ---- TREE ---- */
+    .tree {
+      max-height: 72vh; overflow: auto; border-radius: 10px;
+      background: radial-gradient(circle at top left,rgba(15,23,42,0.9),rgba(15,23,42,0.95));
+      border: 1px solid rgba(148,163,184,0.2);
+    }
+    ul { list-style: none; padding-left: 0; margin: 0; }
+
+    .tree-header {
+      display: grid;
+      grid-template-columns: minmax(0, 90px) minmax(0, 55px) minmax(0, 55px) minmax(0, 60px) minmax(0, 1fr);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;
+      color: #d1d5db; padding: 4px 6px; background: rgba(15,23,42,0.98);
+      border-bottom: 1px solid rgba(148,163,184,0.4); position: sticky; top: 0; z-index: 2;
+    }
+    .tree-header div { font-weight: 600; padding: 4px 6px; }
+
+    li.node {
+      cursor: pointer; border-radius: 0; margin-bottom: 0; transition: background .12s ease;
+    }
+    li.node:nth-child(odd) { background: rgba(255,255,255,0.02); }
+    li.node:hover {
+      background: radial-gradient(circle at left, rgba(34,197,94,0.18), transparent 60%);
+      transform: translateX(1px); box-shadow: 0 0 0 1px rgba(34,197,94,0.25);
+    }
+
+    .tree-row {
+      display: grid;
+      grid-template-columns: minmax(0, 90px) minmax(0, 55px) minmax(0, 55px) minmax(0, 60px) minmax(0, 1fr);
+      align-items: center; font-size: 13px; padding: 0; border-bottom: 1px solid rgba(55,65,81,0.5);
+    }
+    .tree-row > div { padding: 6px 8px; border-right: 1px solid rgba(55,65,81,0.3); }
+    .tree-row > div:last-child { border-right: none; }
+    .tree-col-move { font-weight: 600; font-size: 13px; color: #f9fafb; }
+    .tree-col-games, .tree-col-positions, .tree-col-avg { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; color: #d1d5db; }
+
+    .results-bar-wrapper { position: relative; margin-right: 2px; }
+    .results-bar {
+      display: flex; height: 24px; border-radius: 999px; overflow: hidden;
+      background: #020617; border: 1px solid rgba(148,163,184,0.4);
+    }
+    .results-win  { background: #22c55e; }
+    .results-draw { background: #eab308; }
+    .results-loss { background: #4b5563; }
+    .results-label {
+      position: absolute; left: 6px; right: 6px; top: 0; bottom: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 11px; color: #ffffff; font-weight: 700;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8); pointer-events: none; white-space: nowrap;
+    }
+
+    .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .search-row { display: flex; gap: 6px; margin-top: 4px; }
+    .search-row input { flex: 1; }
+
+    .split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.6fr); gap: 10px; }
+    @media (max-width: 900px) {
+      .split { grid-template-columns: 1fr; }
+      .tree-row { grid-template-columns: minmax(0, 70px) minmax(0, 45px) minmax(0, 45px) minmax(0, 50px) minmax(0, 1fr); }
+      .tree-header { grid-template-columns: minmax(0, 70px) minmax(0, 45px) minmax(0, 45px) minmax(0, 50px) minmax(0, 1fr); }
+    }
+
+    /* Board */
+    .board-panel { display: flex; flex-direction: column; gap: 6px; }
+    .board-wrapper { position: relative; display: inline-block; background: #000; padding: 6px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.4); }
+    .board-row { display: flex; flex-direction: row; }
+    .board-rank-label { width: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #9ca3af; }
+    .board-file-row { display: flex; margin-left: 20px; margin-top: 2px; }
+    .board-file-label { width: 50px; text-align: center; font-size: 11px; color: #9ca3af; }
+    .square {
+      width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;
+      font-size: 45px; user-select: none; position: relative;
+    }
+    .light { background: #f0d9b5; }
+    .dark { background: #b58863; }
+    .square.highlight-from { box-shadow: inset 0 0 0 3px rgba(34,197,94,0.9); }
+    .square.highlight-to   { box-shadow: inset 0 0 0 3px rgba(59,130,246,0.9); }
+
+    #board { position: relative; display: inline-block; }
+    .piece {
+      display: block; line-height: 1;
+      position: relative; z-index: 3;
+    }
+    .piece-white { color: #111827; font-weight: 700; text-shadow: 0 0 2px rgba(0,0,0,0.4); }
+    .piece-black { color: #020617; font-weight: 700; text-shadow: 0 0 2px rgba(255,255,255,0.25); }
+
+    .board-arrows {
+      position: absolute; left: 20px; top: 0; width: 400px; height: 400px;
+      pointer-events: none; z-index: 2;
+    }
+    line.arrow-line { stroke-linecap: round; }
+    line.arrow-head-line { stroke-linecap: round; }
+    path.arrow-head { vector-effect: non-scaling-stroke; }
+
+    .board-controls { display: flex; align-items: flex-start; gap: 6px; justify-content: space-between; font-size: 12px; flex-wrap: wrap; }
+    .board-buttons { display: flex; gap: 6px; flex-wrap: wrap; overflow: visible; flex: 1 1 auto; }
+    .move-info { color: #9ca3af; margin-top: 4px; min-width: 120px; }
+
+    .current-line-panel { margin-top: 6px; }
+    .current-line { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+    .current-move-chip { padding: 2px 6px; border-radius: 999px; border: 1px solid rgba(148,163,184,0.4); font-size: 11px; cursor: pointer; background: #020617; color: #e5e7eb; user-select: none; }
+    .current-move-chip:hover { background: rgba(15,23,42,0.9); }
+    .current-move-chip.active { background: #22c55e; border-color: #22c55e; color: #022c22; font-weight: 600; }
+
+    textarea { width: 100%; min-height: 90px; resize: vertical; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 4px 6px; text-align: left; border-bottom: 1px dashed rgba(148,163,184,0.3); font-size: 12px; }
+    th { cursor: pointer; user-select: none; }
+    .openings-table-scroll th,
+    .openings-table-scroll td {
+      white-space: nowrap;
+    }
+    th:hover { color: #22d3ee; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: rgba(15,23,42,0.7); }
+    tr.games-row-selected { background: rgba(34,197,94,0.2) !important; border-left: 3px solid #22c55e; }
+    tr.openings-row-selected { background: rgba(34,197,94,0.2) !important; border-left: 3px solid #22c55e; }
+
+    .games-table-scroll { max-height: 180px; overflow: auto; margin-bottom: 4px; }
+    .openings-table-scroll { max-height: 350px; overflow: auto; margin-bottom: 4px; }
+    .games-table-scroll thead th, .openings-table-scroll thead th { position: sticky; top: 0; background: rgba(15,23,42,0.98); z-index: 3; }
+    .first-moves-cell { white-space: nowrap; }
+    .opening-line-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+
+    .node-game-entry { cursor: pointer; padding: 2px 0 2px 2px; }
+    .node-game-entry:hover { text-decoration: underline; }
+    .node-game-entry.selected { background: rgba(34,197,94,0.4); border-left: 3px solid #22c55e; border-radius: 4px; padding-left: 4px; font-weight: 600; }
+
+    .node-results-wrapper { margin-top: 8px; border-top: 1px dashed rgba(148,163,184,0.4); padding-top: 6px; }
+    .node-results-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; margin-bottom: 4px; }
+    .node-results-buckets { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; }
+    @media (max-width:700px){ .node-results-buckets { grid-template-columns: 1fr; } }
+    .node-results-column { background: rgba(15,23,42,0.8); border-radius: 8px; border: 1px solid rgba(148,163,184,0.4); padding: 4px 6px; }
+    .node-results-column h4 { font-size: 11px; margin-bottom: 3px; color: #e5e7eb; }
+    .node-results-list { max-height: 120px; overflow: auto; padding-right: 2px; }
+    .node-results-entry { font-size: 11px; cursor:pointer; padding: 1px 0 1px 2px; }
+    .node-results-entry:hover { text-decoration: underline; background: rgba(15,23,42,0.9); border-radius: 4px; }
+
+    .chart-title { font-size:12px; font-weight:600; margin-bottom:2px; }
+    .export-options { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .export-options label { font-size: 11px; color: #e5e7eb; display: flex; align-items: center; }
+
+    .ply-analysis-table { font-size: 11px; margin-top: 6px; background: rgba(15,23,42,0.6); border-radius: 6px; border: 1px solid rgba(148,163,184,0.25); }
+    .ply-analysis-table th { text-align: left; padding: 3px 5px; font-weight: 600; border-bottom: 1px solid rgba(148,163,184,0.3); color: #d1d5db; }
+    .ply-analysis-table td { padding: 2px 5px; border-bottom: 1px dashed rgba(148,163,184,0.15); }
+    .ply-analysis-table tr.clickable { cursor: pointer; }
+    .ply-analysis-table tr.clickable:hover { background: rgba(34,197,94,0.15); }
+
+    /* Backend panels */
+    .backend-panel .row { margin: 4px 0; }
+    #eval-display, #best-move, #pv-line { font-size: 13px; color: #d1d5db; }
+    #trainer-fen { font-size: 12px; font-family: monospace; color: #9ca3af; }
+    #rep-stats { font-size: 12px; }
+    #import-status { font-size: 12px; color: #eab308; }
+    #sync-status-lichess, #sync-status-chesscom { font-size: 12px; color: #eab308; margin-top: 4px; }
+    #sync-state-lichess, #sync-state-chesscom { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+
+    /* Test mode PGN panel */
+    #test-pgn-panel {
+      margin-top: 10px;
+      background: rgba(15,23,42,0.8);
+      border: 1px solid rgba(148,163,184,0.3);
+      border-radius: 8px;
+      padding: 8px;
+      display: none;
+    }
+    #test-pgn-content {
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      color: #d1d5db;
+    }
+    #test-batch-panel {
+      display: none;
+      margin-top: 10px;
+    }
+    #test-batch-progress {
+      font-size: 13px;
+      margin: 8px 0;
+    }
+    #test-batch-stats {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>♟ Chess Study – Live & Batch Test</h1>
+  <div class="meta">Live board updates from the engine. Watch games unfold.</div>
+  <div style="margin-top:6px;">
+    <button id="modeToggleBtn" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6); color:#fff;">Mode: Live</button>
+  </div>
+</header>
+
+<!-- BOARD -->
+<div class="panel top-board-panel">
+  <div class="board-panel">
+    <div><strong>Board & Line</strong><div class="small-muted">The board follows the current line. Navigation buttons and board moves keep the opening tree aligned.</div></div>
+    <div class="board-wrapper" id="boardWrapper">
+      <div id="board"></div>
+      <div class="board-file-row" id="board-files"></div>
+    </div>
+    <div class="board-controls">
+      <div class="board-buttons">
+        <button id="firstBtn" class="secondary">⏮ First</button><button id="prevBtn" class="secondary">◀ Prev</button>
+        <button id="nextBtn" class="secondary">Next ▶</button><button id="lastBtn" class="secondary">Last ⏭</button>
+        <button id="flipBtn" class="secondary">⇅ Flip</button><button id="resetBtn" class="secondary">⟳ Reset</button>
+        <button id="toggleArrowsBtn" class="secondary">Hide arrows</button><button id="copyFenBtn" class="secondary">Copy FEN</button>
+      </div>
+      <div class="move-info" id="moveInfo">Start position</div>
+    </div>
+    <div class="current-line-panel">
+      <div class="small-muted">Current line</div>
+      <div id="currentLineMoves" class="current-line"><span class="small-muted">Start position (no moves yet).</span></div>
+    </div>
+
+    <!-- PGN display for test mode -->
+    
+    
+    <!-- BEGIN UNIFIED ANALYSIS PANEL -->
+  <div id="analysisPanel" style="display:block; margin:12px 0; background:#1a1a2e; padding:12px; border-radius:8px; border:1px solid #333; font-family:'Segoe UI',sans-serif;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <strong style="color:#e0e0e0; font-size:15px;">Analysis</strong>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <select id="analysisEngine" style="background:#2a2a3e; color:#fff; border:1px solid #555; border-radius:3px; padding:3px 6px; font-size:12px;">
+          <option value="engine">My Engine</option>
+          <option value="stockfish">Stockfish</option>
+          <option value="both">Both</option>
+        </select>
+        <button id="toggleAnalysis" style="background:#3b82f6; color:#fff; border:none; padding:4px 12px; border-radius:4px; cursor:pointer; font-size:13px;">Hide</button>
+      </div>
+    </div>
+    <!-- Stockfish settings (shown only when Stockfish or Both is selected) -->
+    <div id="sfSettingsRow" style="display:none; margin-bottom:10px; gap:8px; align-items:center; flex-wrap:wrap;">
+      <label style="color:#ccc; font-size:12px;">PV:<input id="sfMultiPV" type="number" min="1" max="8" value="3" style="width:40px; background:#2a2a3e; color:#fff; border:1px solid #555; border-radius:3px; padding:2px 4px; font-size:12px;"></label>
+      <label style="color:#ccc; font-size:12px;">Time(ms):<input id="sfMovetime" type="number" min="100" max="30000" step="100" value="1500" style="width:60px; background:#2a2a3e; color:#fff; border:1px solid #555; border-radius:3px; padding:2px 4px; font-size:12px;"></label>
+      <label style="color:#ccc; font-size:12px;">Threads:<input id="sfThreads" type="number" min="1" max="8" value="2" style="width:40px; background:#2a2a3e; color:#fff; border:1px solid #555; border-radius:3px; padding:2px 4px; font-size:12px;"></label>
+      <label style="color:#ccc; font-size:12px;">Hash(MB):<input id="sfHash" type="number" min="16" max="1024" step="16" value="256" style="width:55px; background:#2a2a3e; color:#fff; border:1px solid #555; border-radius:3px; padding:2px 4px; font-size:12px;"></label>
+      <button id="sfReanalyzeBtn" style="background:#3b82f6; color:#fff; border:none; padding:3px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Reanalyze</button>
+      <button id="sfCopyBtn" style="background:#555; color:#fff; border:none; padding:3px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Copy</button>
+    </div>
+    <!-- Results area -->
+    <div id="analysisResults" style="font-family:'Fira Code','Courier New',monospace; font-size:13px; line-height:1.6; color:#d0d0d0;">
+      <div id="engineResult" style="margin-bottom:6px;"></div>
+      <div id="stockfishResult" style="margin-bottom:6px;"></div>
+    </div>
+  </div>
+<!-- END UNIFIED ANALYSIS PANEL -->
+    <div id="test-pgn-panel">
+      <div class="small-muted" style="margin-bottom:4px;">📋 Test game PGN</div>
+      <div id="test-pgn-content"></div>
+    </div>
+  </div>
+</div>
+
+<div class="main-column">
+
+  <!-- OPENING TREE + NODE DETAILS -->
+  <div class="panel split">
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px;">
+        <div><strong>Opening Tree</strong><div class="small-muted">Moves from the <strong>current position</strong>. Click a move to go deeper.</div></div>
+        <div class="poetic">"Branch by branch, your repertoire grows."</div>
+      </div>
+      <div class="row" style="margin-bottom:4px;"><button id="treeRootBtn" class="secondary">⏮ Root</button><button id="treeBackBtn" class="secondary">◀ Back</button></div>
+      <div class="small-muted" id="currentLineLabel">Current line: (start position)</div>
+      <div class="tree" aria-live="polite">
+        <div class="tree-header"><div>Move</div><div>Games</div><div>Pos</div><div>Avg Elo</div><div>Results</div></div>
+        <div id="treeBody"></div>
+      </div>
+    </div>
+    <div>
+      <div><strong>Node details</strong><div id="nodeDetails" class="small-muted" style="margin-top:2px;">Select a move in the tree to see stats, line, and FEN.</div><div id="nodeGameList" class="small-muted" style="margin-top:4px;">Games in this node will appear here.</div><div id="nodeResultBuckets" class="small-muted" style="margin-top:4px;">Result buckets (White / Black / Draws) will appear here.</div></div>
+      <div style="margin-top:8px;"><strong>Sample games (raw PGN)</strong><textarea id="sampleGames" readonly placeholder="Sample PGNs for this branch will appear here."></textarea></div>
+    </div>
+  </div>
+
+  <!-- Backend Features Panels (without Import) -->
+  <div class="panel backend-panel">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <h3 style="margin:0 0 4px 0;font-size:14px;">🧠 Engine Analysis</h3>
+        <div id="eval-display">Score: —</div>
+        <div id="best-move">Best: —</div>
+        <div id="pv-line">PV: —</div>
+        <button id="analyze-btn" style="margin-top:4px;">Analyze Position</button>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <h3 style="margin:0 0 4px 0;font-size:14px;">🎯 Trainer</h3>
+        <div id="trainer-fen">FEN: —</div>
+        <div class="row" style="margin-top:4px;">
+          <input id="trainer-input" placeholder="Enter your move (e.g., e4)" style="flex:1;width:auto;">
+          <button id="trainer-submit">Submit</button>
+        </div>
+        <button id="trainer-button">Next Training Position</button>
+        <div id="trainer-result" style="margin-top:4px;"></div>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <h3 style="margin:0 0 4px 0;font-size:14px;">📒 Repertoire</h3>
+        <div><label>Color:</label> <select id="rep-color" style="width:auto;"><option value="white">White</option><option value="black">Black</option></select></div>
+        <div><label>Main Move (UCI):</label> <input id="rep-main-move" placeholder="e2e4" style="width:auto;"></div>
+        <div><label>Alternatives (comma):</label> <input id="rep-alternatives" placeholder="e2e4, d2d4" style="width:auto;"></div>
+        <div><label>Notes:</label> <textarea id="rep-notes" style="height:40px;"></textarea></div>
+        <div><label>Tags (comma):</label> <input id="rep-tags" placeholder="tactical, opening" style="width:auto;"></div>
+        <div class="row"><button id="rep-save">💾 Save</button><button id="rep-delete">🗑 Delete</button></div>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <h3 style="margin:0 0 4px 0;font-size:14px;">📊 Repertoire Stats</h3>
+        <div id="rep-stats">Loading...</div>
+      </div>
+    </div>
+    <hr>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button id="export-pgn">⬇ Export PGN (current line)</button>
+      <button id="flip-board-btn">↔ Flip Board</button>
+      <button id="reset-board-btn">↺ Reset Board</button>
+    </div>
+  </div>
+
+  <!-- Raw PGN / Upload -->
+  <div class="panel">
+    <strong>Raw PGN / Quick Edit</strong><div class="small-muted" style="margin-top:2px;margin-bottom:4px;">Paste PGN here or upload a file. This will rebuild the tree and games list.</div>
+    <textarea id="rawPgn" placeholder="Paste PGN text here…"></textarea>
+    <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;"><button id="parsePgnBtn">Parse pasted PGN</button><button id="clearBtn" class="secondary">Clear all</button></div>
+    <div style="margin-top:6px;"><label class="small">Upload PGN file(s)</label><input id="pgnFiles" type="file" accept=".pgn,text/plain" multiple></div>
+  </div>
+
+  <!-- NEW: Import Games Panel -->
+  <div class="panel" id="import-panel">
+    <strong>📥 Import Games</strong><div class="small-muted">Download and analyze games from Lichess or Chess.com.</div>
+    <div class="row" style="margin-top:6px;">
+      <input id="import-username" placeholder="Your username" style="flex:1;">
+      <button id="import-lichess">Lichess</button>
+      <button id="import-chesscom">Chess.com</button>
+    </div>
+    <div id="import-status"></div>
+
+    <hr style="margin:10px 0;">
+    <strong>🔄 Incremental Sync</strong>
+    <div class="small-muted">Fetch only new games since the last successful sync.</div>
+    <div class="row" style="margin-top:6px;">
+      <button id="sync-lichess">Sync Lichess</button>
+      <button id="sync-chesscom">Sync Chess.com</button>
+      <button id="cancel-lichess" disabled>Cancel Lichess</button>
+      <button id="cancel-chesscom" disabled>Cancel Chess.com</button>
+    </div>
+    <div id="sync-state-lichess"></div>
+    <div id="sync-status-lichess"></div>
+    <div id="sync-state-chesscom"></div>
+    <div id="sync-status-chesscom"></div>
+  </div>
+
+  <!-- NEW: Test Batch Panel (only in Test mode) -->
+  <div class="panel" id="test-batch-panel">
+    <strong>Engine vs – Batch Test</strong>
+    <div class="row" style="margin-top:6px;">
+      <label class="small">Opponent:</label>
+      <select id="batch-opponent" style="width:auto;">
+        <option value="random" selected>Random</option>
+        <option value="self">Self (Engine vs Engine)</option>
+        <option value="stockfish">Stockfish</option>
+        <option value="human">Human (you)</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <label class="small">Games:</label>
+      <input id="batch-num-games" type="number" min="1" max="100" value="10" style="width:80px;">
+      <label class="small">Depth:</label>
+      <input id="batch-depth" type="number" min="1" max="12" value="4" style="width:80px;">
+      <button id="start-batch-btn">Start</button>
+      <button id="stop-batch-btn" class="secondary" disabled>Stop</button>
+    </div>
+    <div id="test-batch-progress"></div>
+    <div id="test-batch-stats"></div>
+  </div>
+
+  <!-- GAMES OVERVIEW -->
+  <div class="panel">
+    <strong>Games overview</strong><div class="small-muted" style="margin-top:2px;margin-bottom:4px;">All games from your PGN. Click a row to load that game on the board; the opening tree will track your path.</div>
+    <div class="games-table-scroll">
+      <table id="gamesTable">
+        <thead><tr><th data-sort="index">#</th><th data-sort="white">White</th><th data-sort="black">Black</th><th data-sort="result">Result</th><th data-sort="whiteElo">White Elo</th><th data-sort="blackElo">Black Elo</th><th data-sort="date">Date</th><th data-sort="moves">Moves</th><th data-sort="firstMoves">First moves</th></tr></thead>
+        <tbody id="gamesTableBody"></tbody>
+      </table>
+    </div>
+    <div class="small-muted" id="gamesSummary">No games loaded.</div>
+  </div>
+
+  <!-- STATISTICS -->
+  <div class="panel">
+    <strong>Statistics</strong><div class="small-muted" style="margin-top:2px;margin-bottom:4px;">A deeper overview of your dataset.</div>
+    <div id="statsOverview" class="small-muted">No games loaded.</div><hr><div id="statsResults" class="small-muted"></div><hr><div id="statsYears" class="small-muted"></div><hr><div id="statsGameLength" class="small-muted"></div><hr><div id="statsFirstMoves" class="small-muted"></div><hr><div id="statsPlayers" class="small-muted"></div><hr><div id="statsProvenance" class="small-muted"></div>
+  </div>
+
+  <!-- GRAPHS & CHARTS -->
+  <div class="panel">
+    <strong>Graphs & charts</strong><div class="small-muted" style="margin-top:2px;margin-bottom:6px;">Visual views of your games – activity by year and result distribution.</div>
+    <div id="chartsEmpty" class="small-muted">No games loaded.</div>
+    <div style="margin-top:4px;"><div class="chart-title">Games per year</div><svg id="chartYears" style="width:100%;max-height:160px;display:none;"></svg></div>
+    <div style="margin-top:8px;"><div class="chart-title">Result breakdown (White / Draw / Black)</div><svg id="chartResults" style="width:100%;max-height:160px;display:none;"></svg></div>
+  </div>
+
+  <!-- OPENINGS LIST -->
+  <div class="panel">
+    <strong>Openings list (by first plies)</strong><div class="small-muted" style="margin-top:2px;margin-bottom:4px;">Choose first plies grouping (1–30). Click a row to update the board and line. <em>Click column headers to sort.</em></div>
+    <div class="row" style="margin-bottom:6px;"><label for="openingsPlySelect" class="small">Group by first plies</label><select id="openingsPlySelect"></select><button id="copyOpeningLineBtn" class="secondary" disabled>Copy line</button></div>
+    <div class="openings-table-scroll" style="margin-bottom:12px;">
+      <table id="openingsTable">
+        <thead><tr><th data-sort="index">#</th><th data-sort="line">Line (first moves)</th><th data-sort="games">Games</th><th data-sort="wWins">W Wins</th><th data-sort="draws">Draws</th><th data-sort="bWins">B Wins</th><th data-sort="whiteWinPct">W%</th><th data-sort="drawPct">D%</th><th data-sort="blackWinPct">B%</th><th data-sort="wElo">Avg Elo W</th><th data-sort="bElo">Avg Elo B</th><th data-sort="avgMoves">Avg moves</th></tr></thead>
+        <tbody id="openingsTableBody"></tbody>
+      </table>
+    </div>
+    <div class="small-muted" id="openingsSummary">No openings yet (no games loaded).</div>
+    <hr><div id="openingsStats" class="small-muted"></div>
+
+    <!-- Short games table -->
+    <div id="shortOpeningsSection" style="margin-top:12px; display:none;">
+      <div class="small-muted" style="margin-bottom:4px;"><strong>Games shorter than selected ply (listed by full line)</strong></div>
+      <div class="openings-table-scroll" style="max-height:250px;">
+        <table id="shortOpeningsTable">
+          <thead><tr><th>#</th><th>Line (full game)</th><th>Games</th><th>W Wins</th><th>Draws</th><th>B Wins</th><th>W%</th><th>D%</th><th>B%</th><th>Avg Elo W</th><th>Avg Elo B</th><th>Avg moves</th></tr></thead>
+          <tbody id="shortOpeningsTableBody"></tbody>
+        </table>
+      </div>
+      <div class="small-muted" id="shortOpeningsSummary"></div>
+    </div>
+
+    <!-- Ply‑wise analysis -->
+    <div id="openingsPlyAnalysis" style="margin-top:8px;">
+      <div class="small-muted" style="margin-bottom:4px;"><strong>Ply‑wise detailed analysis (1‑30 plies) – click a row to update openings list</strong></div>
+      <div id="plyAnalysisTableContainer"></div>
+    </div>
+  </div>
+
+  <!-- DATABASE INSIGHTS -->
+  <div class="panel">
+    <strong>Database Insights</strong><div class="small-muted" style="margin-top:2px;margin-bottom:6px;">Advanced insights about your entire game collection.</div>
+    <div id="insightsRatingAdv" class="small-muted"></div><hr><div id="insightsGenerated" class="small-muted"></div><hr><div id="insightsDataQuality" class="small-muted"></div><hr><div id="insightsECO" class="small-muted"></div>
+  </div>
+
+  <!-- BOTTOM CONTROLS -->
+  <div class="panel">
+    <div class="row"><button id="exportJSON" class="secondary">Export tree JSON</button><div class="export-options"><label><input type="checkbox" id="exportCurrentBranch" checked> Export current branch only</label><button id="downloadPGN" class="secondary">Download filtered PGN</button></div></div>
+    <div class="row" style="margin-top:8px;">
+      <input id="searchMove" type="text" placeholder="Search move..." />
+      <input id="minCount" type="number" min="1" value="1" style="width:90px;" />
+      <button id="applyFilter" class="secondary">Apply filter</button>
+    </div>
+  </div>
+
+  <footer>Built for deliberate opening work – familiar structures, clear stats, and your own games as the teacher.</footer>
+</div>
+
+<!-- ===== LOAD JAVASCRIPT FILES ===== -->
+<script src="js/board.js"></script>
+<script src="js/database_ui.js"></script>
+<script src="js/batch.js"></script>
+  <script src="js/analysis.js"></script>
+<script>
+window.onerror = function(msg, url, line) {
+    var div = document.createElement('div');
+    div.style.cssText = 'color:red; background:#fff; padding:10px; margin:10px; font-size:14px;';
+    div.textContent = 'JS Error: ' + msg + ' (line ' + line + ')';
+    document.body.insertBefore(div, document.body.firstChild);
+};
+</script>
+</body>
+</html>

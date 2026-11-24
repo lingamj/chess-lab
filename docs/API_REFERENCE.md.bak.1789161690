@@ -1,0 +1,11 @@
+# API_REFERENCE
+
+
+## Read-only Analytics
+- GET /api/stats/dashboard
+- GET /api/provenance/audit
+
+## Controlled Provenance Operation
+- POST /api/provenance/normalize-source-username
+
+Normalization is loopback-only, transactional, and validates exact row counts before commit.

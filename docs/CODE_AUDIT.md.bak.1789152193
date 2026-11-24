@@ -1,0 +1,36 @@
+# Chess AI – Code Audit
+**Project:** Chess AI · **Date:** 2026-08-09
+
+## Phase-0 Completion
+All 15 confirmed Phase-0 defects B-020 through B-034 have been addressed according to the current static audit baseline.
+
+The audit covered:
+- Core chess board representation
+- Move generation
+- Search
+- Transposition handling
+- UCI protocol
+- Web backend
+- Frontend integration
+- Neural network
+- Training pipeline
+- Background game execution
+- Runtime verification boundaries
+
+Static syntax verification has passed for the five core Python files.
+Functional/runtime verification remains pending until RV-01 through RV-08 are executed.
+
+
+---
+
+## 2026-08-23 Production Update
+
+- schema_version: 5
+- games: 14,916
+- game_moves: 1,031,269
+- import_batches: 67
+- import_records: 23,496
+- sync_jobs: 2
+- source_username NULL: 0
+- canonical identity: jothi
+- tree_dirty: 0 for both sources
